@@ -44,6 +44,52 @@ def compradores_cercanos():
     )
 
 
+@market_bp.get("/precios/mios")
+@role_required("comprador")
+def mis_precios():
+    """Historial de precios publicados por el comprador autenticado.
+    Solo el comprador fija precios — el palmicultor nunca pone precio en sus
+    publicaciones; revisa el precio vigente de cada comprador y decide a
+    quién vender."""
+    comprador = _get_own_comprador()
+    if not comprador:
+        return jsonify({"message": "Perfil de comprador no encontrado."}), 404
+    precios = (
+        Precio.query.filter_by(comprador_id=comprador.id)
+        .order_by(Precio.fecha_publicacion.desc())
+        .all()
+    )
+    return jsonify([_serialize_precio(p) for p in precios])
+
+
+@market_bp.post("/precios/mios")
+@role_required("comprador")
+def publicar_precio():
+    comprador = _get_own_comprador()
+    if not comprador:
+        return jsonify({"message": "Perfil de comprador no encontrado."}), 404
+
+    data = request.get_json(force=True) or {}
+    valor = data.get("valor_moneda")
+    if not valor or float(valor) <= 0:
+        return jsonify({"message": "El valor del precio es obligatorio."}), 400
+
+    # Solo un precio activo por comprador: el nuevo reemplaza al anterior.
+    Precio.query.filter_by(comprador_id=comprador.id, estado="activo").update({"estado": "inactivo"})
+
+    precio = Precio(
+        comprador_id=comprador.id,
+        producto=(data.get("producto") or "Fruto de palma de aceite").strip(),
+        valor_moneda=float(valor),
+        unidad=(data.get("unidad") or "Tonelada").strip(),
+        fuente=comprador.empresa,
+        estado="activo",
+    )
+    db.session.add(precio)
+    db.session.commit()
+    return jsonify(_serialize_precio(precio)), 201
+
+
 @market_bp.get("/compradores/<int:comprador_id>")
 @jwt_required()
 def detalle_comprador(comprador_id):
@@ -101,7 +147,6 @@ def crear_publicacion():
         palmicultor_id=current_user_id(),
         lote_id=lote_id,
         cantidad_toneladas=float(cantidad),
-        precio_esperado=data.get("precio_esperado"),
         unidad=data.get("unidad") or "Tonelada",
         # RN01: nunca se guarda ubicación exacta de la finca en la publicación pública, solo el municipio.
         municipio=(data.get("municipio") or "Tumaco").strip(),
@@ -121,7 +166,7 @@ def editar_publicacion(publicacion_id):
         return jsonify({"message": "Publicación no encontrada."}), 404
 
     data = request.get_json(force=True) or {}
-    for campo in ("cantidad_toneladas", "precio_esperado", "unidad", "municipio", "descripcion"):
+    for campo in ("cantidad_toneladas", "unidad", "municipio", "descripcion"):
         if campo in data:
             setattr(publicacion, campo, data[campo])
 
@@ -150,20 +195,15 @@ def cambiar_estado_publicacion(publicacion_id):
 @role_required("comprador", "administrador")
 def vitrina_publica():
     """Vitrina pública para compradores. RN01: nunca expone ubicación exacta,
-    coordenadas ni información privada de producción — solo cantidad, precio
-    esperado, unidad, municipio, descripción y fecha."""
+    coordenadas ni información privada de producción — solo cantidad,
+    unidad, municipio, descripción y fecha. El precio no aplica aquí: lo fija
+    cada comprador (ver /precios/mios y /compradores/<id>), no la publicación."""
     limit, offset = paginate_args(request)
     municipio = request.args.get("municipio")
-    precio_min = request.args.get("precio_min", type=float)
-    precio_max = request.args.get("precio_max", type=float)
 
     query = PublicacionMercado.query.filter_by(estado="activa")
     if municipio:
         query = query.filter(PublicacionMercado.municipio.ilike(f"%{municipio}%"))
-    if precio_min is not None:
-        query = query.filter(PublicacionMercado.precio_esperado >= precio_min)
-    if precio_max is not None:
-        query = query.filter(PublicacionMercado.precio_esperado <= precio_max)
 
     publicaciones = (
         query.order_by(PublicacionMercado.fecha_publicacion.desc()).offset(offset).limit(limit).all()
@@ -184,14 +224,28 @@ def _get_own_publicacion(publicacion_id):
     return PublicacionMercado.query.filter_by(id=publicacion_id, palmicultor_id=current_user_id()).first()
 
 
+def _get_own_comprador():
+    return Comprador.query.filter_by(usuario_id=current_user_id()).first()
+
+
 def _serialize(p: PublicacionMercado):
     return {
         "id": p.id,
         "cantidad_toneladas": p.cantidad_toneladas,
-        "precio_esperado": float(p.precio_esperado) if p.precio_esperado is not None else None,
         "unidad": p.unidad,
         "municipio": p.municipio,
         "descripcion": p.descripcion,
+        "estado": p.estado,
+        "fecha_publicacion": p.fecha_publicacion.isoformat() if p.fecha_publicacion else None,
+    }
+
+
+def _serialize_precio(p: Precio):
+    return {
+        "id": p.id,
+        "producto": p.producto,
+        "valor_moneda": float(p.valor_moneda),
+        "unidad": p.unidad,
         "estado": p.estado,
         "fecha_publicacion": p.fecha_publicacion.isoformat() if p.fecha_publicacion else None,
     }

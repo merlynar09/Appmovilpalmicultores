@@ -34,6 +34,7 @@ import CompradorDetalleScreen from './src/screens/palmicultor/CompradorDetalleSc
 import CompradorDashboard from './src/screens/comprador/CompradorDashboard';
 import MercadoVitrinaScreen from './src/screens/comprador/MercadoVitrinaScreen';
 import PublicacionDetalleScreen from './src/screens/comprador/PublicacionDetalleScreen';
+import MisPreciosScreen from './src/screens/comprador/MisPreciosScreen';
 
 import TransportadorDashboard from './src/screens/transportador/TransportadorDashboard';
 import SolicitudesPendientesScreen from './src/screens/transportador/SolicitudesPendientesScreen';
@@ -136,6 +137,7 @@ export default function App() {
         <Stack.Screen name="CompradorDashboard" component={CompradorDashboard} options={{ headerShown: false }} />
         <Stack.Screen name="MercadoVitrina" component={MercadoVitrinaScreen} options={{ title: 'Cosechas disponibles' }} />
         <Stack.Screen name="PublicacionDetalle" component={PublicacionDetalleScreen} options={{ title: 'Publicación' }} />
+        <Stack.Screen name="MisPrecios" component={MisPreciosScreen} options={{ title: 'Mi precio' }} />
 
         {/* --- Transportador --- */}
         <Stack.Screen name="TransportadorDashboard" component={TransportadorDashboard} options={{ headerShown: false }} />

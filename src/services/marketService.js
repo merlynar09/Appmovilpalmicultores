@@ -42,11 +42,13 @@ export const cambiarEstadoPublicacion = (id, estado) =>
 export async function vitrinaPublica(filtros = {}) {
   const params = new URLSearchParams();
   if (filtros.municipio) params.set('municipio', filtros.municipio);
-  if (filtros.precio_min) params.set('precio_min', filtros.precio_min);
-  if (filtros.precio_max) params.set('precio_max', filtros.precio_max);
   const qs = params.toString();
   return apiRequest(`/mercado/vitrina${qs ? `?${qs}` : ''}`);
 }
 
 export const detallePublicacion = (id) => apiRequest(`/mercado/publicaciones/${id}/detalle`);
 export const detalleComprador = (id) => apiRequest(`/compradores/${id}`);
+
+// Precios: los fija siempre el comprador, nunca el palmicultor.
+export const misPrecios = () => apiRequest('/precios/mios');
+export const publicarPrecio = (payload) => apiRequest('/precios/mios', { method: 'POST', body: payload });

@@ -58,7 +58,7 @@ export default function ProduccionHistoryScreen({ navigation, route }) {
             <Badge text={FUENTE_LABEL[item.fuente] || item.fuente} tone={item.fuente === 'app' ? 'neutral' : 'primary'} />
           </View>
           <Text style={styles.linea}>Muestra: {item.palmas_evaluadas} palmas ({item.porcentaje_muestra ? `${item.porcentaje_muestra.toFixed(1)}%` : '—'}) · {item.palmas_improductivas} improductivas</Text>
-          <Text style={styles.linea}>Racimos: {item.racimos_totales} · Inflorescencias: {item.inflorescencias}</Text>
+          <Text style={styles.linea}>Racimos: {item.racimos_totales}</Text>
           {item.peso_promedio_racimo ? <Text style={styles.linea}>Peso promedio racimo: {item.peso_promedio_racimo} kg</Text> : null}
         </Card>
       )}

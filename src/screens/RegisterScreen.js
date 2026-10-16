@@ -1,8 +1,9 @@
 // screens/RegisterScreen.js
 // Pantalla de Registro — alto contraste, campos grandes, selección de rol.
-// Roles soportados en el registro público: Palmicultor y Comprador.
-// (Transportador y Administrador se gestionan por flujos/validación aparte,
-// según la matriz de permisos del proyecto).
+// Roles soportados en el registro público: Palmicultor, Comprador y
+// Transportador. El Transportador queda "pendiente" hasta que un
+// administrador lo valide (ver AdminTransportadoresScreen). El rol
+// Administrador no se autorregistra, se gestiona aparte.
 
 import React, { useState } from 'react';
 import {
@@ -24,6 +25,7 @@ import { registerUser } from '../services/authService';
 const ROLES = [
   { key: 'palmicultor', label: 'Palmicultor', icon: 'leaf-outline' },
   { key: 'comprador', label: 'Comprador', icon: 'basket-outline' },
+  { key: 'transportador', label: 'Transportador', icon: 'car-outline' },
 ];
 
 export default function RegisterScreen({ navigation }) {
@@ -132,7 +134,7 @@ export default function RegisterScreen({ navigation }) {
               >
                 <Ionicons
                   name={r.icon}
-                  size={28}
+                  size={24}
                   color={selected ? colors.white : colors.primary}
                 />
                 <Text style={[styles.roleLabel, selected && { color: colors.white }]}>
@@ -249,7 +251,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.surface,
     borderRadius: radius.md,
-    paddingVertical: spacing.lg,
+    paddingVertical: spacing.md,
+    paddingHorizontal: spacing.xs,
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 2,
@@ -260,7 +263,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary,
     borderColor: colors.primaryDark,
   },
-  roleLabel: { ...typography.label, marginTop: spacing.sm, textTransform: 'none' },
+  roleLabel: { ...typography.label, marginTop: spacing.sm, textTransform: 'none', fontSize: 13, textAlign: 'center' },
   passwordRow: {
     flexDirection: 'row',
     alignItems: 'center',

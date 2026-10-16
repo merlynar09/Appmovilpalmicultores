@@ -1,6 +1,8 @@
 // screens/palmicultor/PublicarProductoScreen.js
-// RN01: la publicación solo expone cantidad, precio, unidad, municipio,
-// descripción y fecha — nunca ubicación exacta de la finca.
+// RN01: la publicación solo expone cantidad, unidad, municipio, descripción
+// y fecha — nunca ubicación exacta de la finca. El precio NO lo pone el
+// palmicultor: cada comprador fija su propio precio (ver "Compradores en tu
+// zona") y el palmicultor decide a quién vender según esos precios.
 
 import React, { useEffect, useState } from 'react';
 import { ScrollView, Text, Alert } from 'react-native';
@@ -13,7 +15,6 @@ export default function PublicarProductoScreen({ navigation }) {
   const [lotes, setLotes] = useState([]);
   const [loteId, setLoteId] = useState(null);
   const [cantidad, setCantidad] = useState('');
-  const [precio, setPrecio] = useState('');
   const [municipio, setMunicipio] = useState('Tumaco');
   const [descripcion, setDescripcion] = useState('');
   const [loading, setLoading] = useState(false);
@@ -34,7 +35,6 @@ export default function PublicarProductoScreen({ navigation }) {
       await publicarProducto({
         lote_id: loteId,
         cantidad_toneladas: Number(cantidad),
-        precio_esperado: precio ? Number(precio) : null,
         municipio,
         descripcion: descripcion.trim(),
       });
@@ -51,7 +51,7 @@ export default function PublicarProductoScreen({ navigation }) {
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={{ padding: spacing.lg }}>
       <Text style={styles.hint}>
-        Solo se mostrará al comprador la cantidad, el precio esperado, el municipio y la descripción — nunca la ubicación exacta de tu finca.
+        Solo se mostrará al comprador la cantidad, el municipio y la descripción — nunca la ubicación exacta de tu finca. El precio no se define aquí: revisa el precio vigente de cada comprador en "Compradores en tu zona" y decide a quién venderle.
       </Text>
 
       {lotes.length > 0 && (
@@ -64,7 +64,6 @@ export default function PublicarProductoScreen({ navigation }) {
       )}
 
       <Field label="Cantidad (toneladas)" keyboardType="numeric" value={cantidad} onChangeText={setCantidad} error={error} />
-      <Field label="Precio esperado por tonelada (COP)" keyboardType="numeric" value={precio} onChangeText={setPrecio} />
       <Field label="Municipio" value={municipio} onChangeText={setMunicipio} />
       <Field label="Descripción" placeholder="Fruto fresco, cosecha reciente..." value={descripcion} onChangeText={setDescripcion} multiline />
 

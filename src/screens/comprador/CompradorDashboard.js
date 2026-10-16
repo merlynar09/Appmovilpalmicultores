@@ -5,22 +5,22 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing, typography, radius, MIN_TOUCH_TARGET } from '../../theme/theme';
 import { getStoredUser } from '../../services/authService';
-import { getPrecioVigente, vitrinaPublica } from '../../services/marketService';
+import { misPrecios, vitrinaPublica } from '../../services/marketService';
 
 export default function CompradorDashboard({ navigation }) {
   const [usuario, setUsuario] = useState(null);
-  const [precio, setPrecio] = useState(null);
+  const [precioActivo, setPrecioActivo] = useState(null);
   const [publicaciones, setPublicaciones] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
 
   const load = useCallback(async () => {
-    const [u, p, pub] = await Promise.all([
+    const [u, precios, pub] = await Promise.all([
       getStoredUser(),
-      getPrecioVigente(),
+      misPrecios().catch(() => []),
       vitrinaPublica().catch(() => []),
     ]);
     setUsuario(u);
-    setPrecio(p);
+    setPrecioActivo(precios.find((p) => p.estado === 'activo') || null);
     setPublicaciones(pub.slice(0, 5));
   }, []);
 
@@ -50,9 +50,13 @@ export default function CompradorDashboard({ navigation }) {
       </View>
 
       <View style={styles.priceCard}>
-        <Text style={styles.priceLabel}>PRECIO DE REFERENCIA</Text>
-        <Text style={styles.priceValue}>{precio?.valor ? `$${Number(precio.valor).toLocaleString('es-CO')}` : '$ ----'}</Text>
-        <Text style={styles.priceUnit}>{precio?.unidad || 'Tonelada de Aceite de Palma'}</Text>
+        <Text style={styles.priceLabel}>MI PRECIO VIGENTE</Text>
+        <Text style={styles.priceValue}>{precioActivo ? `$${Number(precioActivo.valor_moneda).toLocaleString('es-CO')}` : 'Sin definir'}</Text>
+        <Text style={styles.priceUnit}>{precioActivo ? `por ${precioActivo.unidad}` : 'Publica tu precio para que los palmicultores lo vean'}</Text>
+        <TouchableOpacity style={styles.publishButton} onPress={() => navigation.navigate('MisPrecios')} activeOpacity={0.85}>
+          <Text style={styles.publishButtonText}>{precioActivo ? 'Actualizar precio' : 'Publicar mi precio'}</Text>
+          <Ionicons name="arrow-forward" size={18} color={colors.white} />
+        </TouchableOpacity>
       </View>
 
       <TouchableOpacity style={styles.bigButton} onPress={() => navigation.navigate('MercadoVitrina')} activeOpacity={0.85}>
@@ -66,7 +70,6 @@ export default function CompradorDashboard({ navigation }) {
           <View style={styles.pubCard}>
             <View style={{ flex: 1 }}>
               <Text style={styles.pubCantidad}>{p.cantidad_toneladas} ton — {p.municipio}</Text>
-              <Text style={styles.pubPrecio}>{p.precio_esperado ? `$${Number(p.precio_esperado).toLocaleString('es-CO')} / ${p.unidad}` : 'Precio a convenir'}</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
           </View>
@@ -85,6 +88,17 @@ const styles = StyleSheet.create({
   priceLabel: { color: colors.white, opacity: 0.8, fontWeight: '700', fontSize: 13, letterSpacing: 0.5 },
   priceValue: { color: colors.white, fontSize: 34, fontWeight: '800', marginTop: 4 },
   priceUnit: { color: colors.white, opacity: 0.9, fontSize: 15, marginTop: 2 },
+  publishButton: {
+    marginTop: spacing.lg,
+    backgroundColor: colors.primaryDark,
+    borderRadius: radius.pill,
+    minHeight: MIN_TOUCH_TARGET - 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  publishButtonText: { color: colors.white, fontWeight: '700', fontSize: 16 },
   bigButton: {
     backgroundColor: colors.accentOrange, borderRadius: radius.pill, minHeight: MIN_TOUCH_TARGET,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginBottom: spacing.xl,
@@ -96,6 +110,5 @@ const styles = StyleSheet.create({
     borderRadius: radius.md, padding: spacing.md, marginBottom: spacing.sm,
   },
   pubCantidad: { ...typography.label, textTransform: 'none', fontSize: 15 },
-  pubPrecio: { ...typography.subtitle, fontSize: 13, marginTop: 2 },
   emptyText: { color: colors.textSecondary, paddingVertical: spacing.md },
 });

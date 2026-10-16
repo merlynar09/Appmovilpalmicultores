@@ -52,7 +52,7 @@ export default function PronosticoDetailScreen({ navigation, route }) {
 
         <View style={styles.formula}>
           <Text style={styles.formulaText}>1. Palmas Productivas = Palmas Totales − Palmas Improductivas en muestra</Text>
-          <Text style={styles.formulaText}>2. Promedio de Estructuras = (Racimos + Inflorescencias en muestra) / Palmas Productivas Muestreadas</Text>
+          <Text style={styles.formulaText}>2. Promedio de Estructuras = Racimos en muestra / Palmas Productivas Muestreadas</Text>
           <Text style={styles.formulaText}>3. Total de Racimos = Palmas Productivas × Promedio de Estructuras</Text>
           <Text style={styles.formulaText}>4. Producción Estimada = Total Racimos × Peso Promedio del Racimo</Text>
           <Text style={styles.formulaText}>5. Distribución mensual histórica del Pacífico nariñense (jul-dic)</Text>

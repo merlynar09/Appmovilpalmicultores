@@ -80,8 +80,8 @@ def calcular_pronostico():
     # 1. Palmas Productivas = Palmas Totales - Palmas Improductivas en muestra
     palmas_productivas = palmas_totales - palmas_improductivas_muestra
 
-    # 2. Promedio de Estructuras = (Racimos + Inflorescencias en muestra) / Palmas Productivas Muestreadas
-    estructuras_muestra = int(registro.racimos_totales or 0) + int(registro.inflorescencias or 0)
+    # 2. Promedio de Estructuras = Racimos en muestra / Palmas Productivas Muestreadas
+    estructuras_muestra = int(registro.racimos_totales or 0)
     promedio_estructuras = estructuras_muestra / palmas_productivas_muestreadas
 
     # 3. Total de Racimos en Lote = Palmas Productivas × Promedio de Estructuras
@@ -157,7 +157,7 @@ def _serialize(p: PronosticoProduccion, detalle=False):
                 "observaciones": p.observaciones,
                 "formula": {
                     "paso_1": "Palmas Productivas = Palmas Totales - Palmas Improductivas en muestra",
-                    "paso_2": "Promedio de Estructuras = (Racimos + Inflorescencias en muestra) / Palmas Productivas Muestreadas",
+                    "paso_2": "Promedio de Estructuras = Racimos en muestra / Palmas Productivas Muestreadas",
                     "paso_3": "Total de Racimos en Lote = Palmas Productivas × Promedio de Estructuras",
                     "paso_4": "Producción Estimada = Total Racimos × Peso Promedio Histórico del Racimo",
                     "paso_5": "Distribución mensual histórica del Pacífico nariñense (jul-dic)",

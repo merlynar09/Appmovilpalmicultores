@@ -206,7 +206,6 @@ def run():
                 fecha=date.today() - timedelta(days=1),
                 palmas_evaluadas=45,
                 palmas_improductivas=3,
-                inflorescencias=18,
                 racimos_pequenos=20,
                 racimos_medianos=35,
                 racimos_maduros=35,
@@ -228,7 +227,7 @@ def run():
             palmas_improductivas_muestra = registro.palmas_improductivas
             palmas_productivas_muestreadas = registro.palmas_evaluadas - palmas_improductivas_muestra
             palmas_productivas = palmas_totales - palmas_improductivas_muestra
-            promedio_estructuras = (registro.racimos_totales + registro.inflorescencias) / palmas_productivas_muestreadas
+            promedio_estructuras = registro.racimos_totales / palmas_productivas_muestreadas
             racimos_estimados = palmas_productivas * promedio_estructuras
             produccion_estimada_kg = racimos_estimados * registro.peso_promedio_racimo
             produccion_estimada_ton = produccion_estimada_kg / 1000
@@ -272,7 +271,6 @@ def run():
                     palmicultor_id=palmicultor.id,
                     lote_id=lote.id,
                     cantidad_toneladas=12,
-                    precio_esperado=4100000,
                     unidad="Tonelada",
                     municipio=finca.municipio,
                     descripcion="Fruto fresco de palma africana, cosecha reciente.",

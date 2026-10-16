@@ -14,7 +14,7 @@ import { enviarComandoSms } from '../../services/smsService';
 
 const EJEMPLOS = {
   AYUDA: 'AYUDA',
-  REGISTRO: 'REGISTRO Lote-A1 40 2 80 15 16',
+  REGISTRO: 'REGISTRO Lote-A1 40 2 80 16',
   TRANSPORTE: 'TRANSPORTE Lote-A1 8 2026-10-05',
 };
 

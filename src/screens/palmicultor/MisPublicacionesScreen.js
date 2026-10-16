@@ -57,7 +57,6 @@ export default function MisPublicacionesScreen({ navigation }) {
             <Text style={styles.cantidad}>{item.cantidad_toneladas} ton</Text>
             <Badge text={item.estado} tone={ESTADO_TONE[item.estado] || 'neutral'} />
           </View>
-          <Text style={styles.linea}>{item.precio_esperado ? `$${Number(item.precio_esperado).toLocaleString('es-CO')} / ${item.unidad}` : 'Sin precio definido'}</Text>
           <Text style={styles.linea}>{item.municipio}</Text>
           {item.descripcion ? <Text style={styles.linea}>{item.descripcion}</Text> : null}
           {item.estado === 'activa' && (

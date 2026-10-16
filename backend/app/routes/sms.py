@@ -9,7 +9,7 @@ ya verificó la línea), no por JWT, porque el escenario objetivo es un
 palmicultor SIN datos móviles ni sesión abierta en la app.
 
 Comandos soportados (separados por espacios):
-  REGISTRO <codigo_lote> <palmas_evaluadas> <palmas_improductivas> <racimos_totales> <inflorescencias> <peso_promedio_kg>
+  REGISTRO <codigo_lote> <palmas_evaluadas> <palmas_improductivas> <racimos_totales> <peso_promedio_kg>
   TRANSPORTE <codigo_lote> <cantidad_toneladas> <fecha AAAA-MM-DD>
   AYUDA
 """
@@ -26,7 +26,7 @@ sms_bp = Blueprint("sms", __name__)
 
 AYUDA_TEXTO = (
     "Comandos disponibles:\n"
-    "REGISTRO <lote> <palmasEvaluadas> <palmasImproductivas> <racimos> <inflorescencias> <pesoPromedioKg>\n"
+    "REGISTRO <lote> <palmasEvaluadas> <palmasImproductivas> <racimos> <pesoPromedioKg>\n"
     "TRANSPORTE <lote> <toneladas> <fechaAAAA-MM-DD>\n"
     "AYUDA"
 )
@@ -99,10 +99,10 @@ def listar_logs():
 
 
 def _procesar_registro(usuario: Usuario, args, canal):
-    if len(args) < 6:
-        raise ValueError("faltan datos. Formato: REGISTRO lote palmasEvaluadas palmasImproductivas racimos inflorescencias pesoPromedio")
+    if len(args) < 5:
+        raise ValueError("faltan datos. Formato: REGISTRO lote palmasEvaluadas palmasImproductivas racimos pesoPromedio")
 
-    codigo_lote, palmas_evaluadas, palmas_improductivas, racimos, inflorescencias, peso_promedio = args[:6]
+    codigo_lote, palmas_evaluadas, palmas_improductivas, racimos, peso_promedio = args[:5]
 
     lote = (
         Lote.query.join(Finca)
@@ -116,7 +116,6 @@ def _procesar_registro(usuario: Usuario, args, canal):
         palmas_evaluadas = int(palmas_evaluadas)
         palmas_improductivas = int(palmas_improductivas)
         racimos = int(racimos)
-        inflorescencias = int(inflorescencias)
         peso_promedio = float(peso_promedio)
     except ValueError:
         raise ValueError("los valores numéricos no son válidos")
@@ -127,7 +126,6 @@ def _procesar_registro(usuario: Usuario, args, canal):
         palmas_evaluadas=palmas_evaluadas,
         palmas_improductivas=palmas_improductivas,
         racimos_totales=racimos,
-        inflorescencias=inflorescencias,
         peso_promedio_racimo=peso_promedio,
         fuente=canal,
     )

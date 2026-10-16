@@ -100,7 +100,6 @@ class RegistroProduccion(db.Model):
     lote_id = db.Column(db.Integer, db.ForeignKey("lotes.id"), nullable=False)
     fecha = db.Column(db.Date, default=datetime.utcnow)
     palmas_evaluadas = db.Column(db.Integer)
-    inflorescencias = db.Column(db.Integer)
     racimos_pequenos = db.Column(db.Integer)
     racimos_medianos = db.Column(db.Integer)
     racimos_maduros = db.Column(db.Integer)
@@ -311,7 +310,10 @@ class PublicacionMercado(db.Model):
     palmicultor_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=False)
     lote_id = db.Column(db.Integer, db.ForeignKey("lotes.id"), nullable=True)
     cantidad_toneladas = db.Column(db.Float, nullable=False)
-    precio_esperado = db.Column(db.Numeric(12, 2))
+    # El precio lo fija siempre el comprador (ver Precio/Comprador), nunca el
+    # palmicultor: su publicación solo anuncia cantidad disponible. El
+    # palmicultor revisa los precios vigentes por comprador y decide a quién
+    # vender.
     unidad = db.Column(db.String(50), default="Tonelada")
     municipio = db.Column(db.String(100), default="Tumaco")
     descripcion = db.Column(db.Text)

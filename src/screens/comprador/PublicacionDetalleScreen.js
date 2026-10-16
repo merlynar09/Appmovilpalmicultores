@@ -20,7 +20,6 @@ export default function PublicacionDetalleScreen({ route }) {
       <Card>
         <Text style={styles.title}>{p.cantidad_toneladas} toneladas de fruto de palma</Text>
         <Badge text={p.estado} tone="success" />
-        <IconRow icon="pricetag-outline" label="Precio" value={p.precio_esperado ? `$${Number(p.precio_esperado).toLocaleString('es-CO')} / ${p.unidad}` : 'A convenir'} />
         <IconRow icon="location-outline" label="Municipio" value={p.municipio} />
         <IconRow icon="calendar-outline" label="Publicado" value={p.fecha_publicacion ? new Date(p.fecha_publicacion).toLocaleDateString('es-CO') : '—'} />
       </Card>

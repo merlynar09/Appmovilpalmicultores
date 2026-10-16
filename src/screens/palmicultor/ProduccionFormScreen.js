@@ -18,7 +18,6 @@ export default function ProduccionFormScreen({ navigation, route }) {
 
   const [palmasEvaluadas, setPalmasEvaluadas] = useState('');
   const [palmasImproductivas, setPalmasImproductivas] = useState('');
-  const [inflorescencias, setInflorescencias] = useState('');
   const [racimosTotales, setRacimosTotales] = useState('');
   const [pesoPromedio, setPesoPromedio] = useState('');
   const [frutoSuelto, setFrutoSuelto] = useState('');
@@ -55,7 +54,6 @@ export default function ProduccionFormScreen({ navigation, route }) {
         lote_id: loteId,
         palmas_evaluadas: Number(palmasEvaluadas),
         palmas_improductivas: Number(palmasImproductivas || 0),
-        inflorescencias: Number(inflorescencias || 0),
         racimos_totales: Number(racimosTotales || 0),
         peso_promedio_racimo: pesoPromedio ? Number(pesoPromedio) : null,
         fruto_suelto: frutoSuelto ? Number(frutoSuelto) : null,
@@ -97,7 +95,6 @@ export default function ProduccionFormScreen({ navigation, route }) {
 
       <Field label="Palmas improductivas en la muestra" keyboardType="numeric" value={palmasImproductivas} onChangeText={setPalmasImproductivas} />
       <Field label="Racimos contados (muestra)" keyboardType="numeric" value={racimosTotales} onChangeText={setRacimosTotales} />
-      <Field label="Inflorescencias (muestra)" keyboardType="numeric" value={inflorescencias} onChangeText={setInflorescencias} />
       <Field label="Peso promedio histórico del racimo (kg)" keyboardType="numeric" value={pesoPromedio} onChangeText={setPesoPromedio} />
       <Field label="Fruto suelto (kg, opcional)" keyboardType="numeric" value={frutoSuelto} onChangeText={setFrutoSuelto} />
       <Field label="Observaciones" value={observaciones} onChangeText={setObservaciones} multiline />

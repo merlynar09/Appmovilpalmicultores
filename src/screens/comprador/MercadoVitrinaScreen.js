@@ -1,6 +1,8 @@
 // screens/comprador/MercadoVitrinaScreen.js
-// Vitrina pública (RN01): solo cantidad, precio esperado, unidad, municipio,
-// descripción y fecha. Nunca ubicación exacta ni datos privados de producción.
+// Vitrina pública (RN01): solo cantidad, unidad, municipio, descripción y
+// fecha. Nunca ubicación exacta ni datos privados de producción. El precio
+// no está aquí: lo fija cada comprador (pantalla "Mi Precio"), no la
+// publicación del palmicultor.
 
 import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, RefreshControl, TouchableOpacity } from 'react-native';
@@ -54,7 +56,6 @@ export default function MercadoVitrinaScreen({ navigation }) {
             <View style={{ flex: 1 }}>
               <Text style={styles.cantidad}>{item.cantidad_toneladas} ton</Text>
               <Text style={styles.municipio}>{item.municipio}</Text>
-              <Text style={styles.precio}>{item.precio_esperado ? `$${Number(item.precio_esperado).toLocaleString('es-CO')} / ${item.unidad}` : 'Precio a convenir'}</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
           </Card>
@@ -72,5 +73,4 @@ const styles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center' },
   cantidad: { ...typography.label, textTransform: 'none', fontSize: 17 },
   municipio: { ...typography.subtitle, fontSize: 13, marginTop: 2 },
-  precio: { ...typography.body, fontWeight: '700', color: colors.primary, marginTop: 4 },
 });
