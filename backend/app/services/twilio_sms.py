@@ -23,6 +23,20 @@ import os
 
 logger = logging.getLogger("palma_viva.twilio")
 
+# En algunos equipos/redes (proxy corporativo, antivirus con inspección TLS)
+# Windows confía en un certificado raíz que el bundle de `certifi` no trae,
+# y las llamadas HTTPS del SDK de Twilio fallan con
+# CERTIFICATE_VERIFY_FAILED aunque curl/el navegador sí conecten bien. Usar
+# el almacén de certificados nativo del sistema evita ese falso negativo sin
+# desactivar la verificación TLS (sigue siendo una verificación real, solo
+# que contra el almacén de confianza del SO en vez del de certifi).
+try:
+    import truststore
+
+    truststore.inject_into_ssl()
+except Exception as e:  # truststore no instalado o SO no soportado
+    logger.debug("truststore no disponible, se usa el bundle de certifi por defecto: %s", e)
+
 _client = None
 _client_intentado = False
 
@@ -83,14 +97,22 @@ def enviar_sms(to_e164: str, body: str) -> dict:
     if not to_e164:
         return {"ok": False, "sid": None, "error": "Número de destino inválido.", "estado": "destino_invalido"}
 
-    try:
-        mensaje = client.messages.create(to=to_e164, from_=remitente, body=body)
-        return {"ok": True, "sid": mensaje.sid, "error": None, "estado": mensaje.status or "queued"}
-    except Exception as e:
-        # Cubre TwilioRestException (número no verificado en cuenta trial,
-        # remitente inválido, saldo, geo-permisos, etc.) y errores de red.
-        logger.warning("Error enviando SMS a %s: %s", to_e164, e)
-        return {"ok": False, "sid": None, "error": str(e), "estado": "error"}
+    # Hasta 2 intentos: en Windows, con algunos stacks TLS/antivirus, el
+    # primer request de una conexión HTTPS recién abierta puede fallar de
+    # forma transitoria (p. ej. error de bajo nivel de socket) sin que
+    # Twilio haya procesado nada — reintentar una vez es seguro aquí.
+    ultimo_error = None
+    for intento in range(2):
+        try:
+            mensaje = client.messages.create(to=to_e164, from_=remitente, body=body)
+            return {"ok": True, "sid": mensaje.sid, "error": None, "estado": mensaje.status or "queued"}
+        except Exception as e:
+            # Cubre TwilioRestException (número no verificado en cuenta trial,
+            # remitente inválido, saldo, geo-permisos, etc.) y errores de red.
+            ultimo_error = e
+            logger.warning("Error enviando SMS a %s (intento %d/2): %s", to_e164, intento + 1, e)
+
+    return {"ok": False, "sid": None, "error": str(ultimo_error), "estado": "error"}
 
 
 def validar_firma(url: str, params: dict, signature: str) -> bool:
