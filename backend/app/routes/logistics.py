@@ -13,8 +13,10 @@ from app.models import (
     Comprador,
     EstadoVia,
     Notificacion,
+    Usuario,
 )
 from app.utils import role_required, current_user_id
+from app.routes.sms import notificar_por_sms
 
 logistics_bp = Blueprint("logistics", __name__)
 
@@ -228,15 +230,18 @@ def aceptar_solicitud(solicitud_id):
     if data.get("tarifa_acordada") is not None:
         solicitud.tarifa_acordada = data["tarifa_acordada"]
 
+    titulo = "Transporte aceptado"
+    mensaje = f"Un transportador aceptó tu solicitud #{solicitud.id}."
     db.session.add(
         Notificacion(
             usuario_id=solicitud.palmicultor_id,
             tipo="logistica",
-            titulo="Transporte aceptado",
-            mensaje=f"Un transportador aceptó tu solicitud #{solicitud.id}.",
+            titulo=titulo,
+            mensaje=mensaje,
             enlace="HistorialDespachos",
         )
     )
+    notificar_por_sms(Usuario.query.get(solicitud.palmicultor_id), titulo, mensaje)
     db.session.commit()
     return jsonify(_serialize_solicitud(solicitud, detalle=True))
 
@@ -270,15 +275,18 @@ def actualizar_estado_solicitud(solicitud_id):
         return jsonify({"message": "Estado inválido."}), 400
 
     solicitud.estado = nuevo_estado
+    titulo = "Actualización de transporte"
+    mensaje = f"Tu solicitud #{solicitud.id} cambió a: {nuevo_estado}."
     db.session.add(
         Notificacion(
             usuario_id=solicitud.palmicultor_id,
             tipo="logistica",
-            titulo="Actualización de transporte",
-            mensaje=f"Tu solicitud #{solicitud.id} cambió a: {nuevo_estado}.",
+            titulo=titulo,
+            mensaje=mensaje,
             enlace="HistorialDespachos",
         )
     )
+    notificar_por_sms(Usuario.query.get(solicitud.palmicultor_id), titulo, mensaje)
     db.session.commit()
     return jsonify(_serialize_solicitud(solicitud))
 

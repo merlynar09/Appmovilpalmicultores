@@ -3,8 +3,9 @@ from datetime import date
 from flask import Blueprint, request, jsonify
 
 from app.extensions import db
-from app.models import CicloCosecha, Lote, Finca, Notificacion
+from app.models import CicloCosecha, Lote, Finca, Notificacion, Usuario
 from app.utils import role_required, current_user_id
+from app.routes.sms import notificar_por_sms
 
 alertas_bp = Blueprint("alertas", __name__)
 
@@ -87,6 +88,10 @@ def _generar_alertas_cosecha(usuario_id):
                     enlace="Pronosticos",
                 )
             )
+            # Mismo aviso también por SMS real (si Twilio está habilitado):
+            # es el mismo usuario y la misma alerta que ya se generó, solo
+            # un canal de entrega adicional — no un envío masivo nuevo.
+            notificar_por_sms(Usuario.query.get(usuario_id), titulo, mensaje)
 
     db.session.commit()
 

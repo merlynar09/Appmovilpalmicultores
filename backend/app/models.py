@@ -285,6 +285,13 @@ class SmsUssdLog(db.Model):
     usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=True)
     creado_en = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # --- Twilio (SMS real) ---
+    direccion = db.Column(db.String(10), default="entrante")  # entrante | saliente
+    proveedor = db.Column(db.String(10), default="mock")  # mock | twilio
+    twilio_sid = db.Column(db.String(50), unique=True, nullable=True)
+    estado_entrega = db.Column(db.String(20), nullable=True)
+    # queued | sent | delivered | undelivered | failed (StatusCallback de Twilio)
+
     usuario = db.relationship("Usuario", backref="sms_logs")
 
 

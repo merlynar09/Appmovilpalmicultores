@@ -1,12 +1,16 @@
-"""Puente SMS/USSD (MOCK).
+"""Puente SMS/USSD.
 
-No hay un proveedor real (Twilio u otro) conectado todavía porque requiere
-credenciales externas que no están disponibles en este entorno. Este módulo
-simula el extremo receptor de un gateway SMS/USSD: un operador móvil
-entregaría el mensaje del usuario a este mismo endpoint. La autenticación es
-por número de teléfono registrado (igual que un USSD real, donde el operador
-ya verificó la línea), no por JWT, porque el escenario objetivo es un
-palmicultor SIN datos móviles ni sesión abierta en la app.
+Dos orígenes totalmente separados que comparten la MISMA lógica de negocio
+(comandos, validaciones, operaciones):
+
+1. `/sms/entrante` — MOCK interno (JSON, sin firma). Lo usa el simulador
+   SMS/USSD de la app (pantalla "Simulador SMS/USSD") para probar los
+   comandos sin depender de un operador real. Sirve tanto para "sms" como
+   para "ussd" simulados — el USSD real sigue sin proveedor conectado.
+
+2. `/sms/webhook/twilio` — webhook REAL de Twilio (form-urlencoded, firma
+   X-Twilio-Signature validada). Solo atiende el canal SMS: Twilio no provee
+   USSD, así que esto nunca toca el flujo "ussd" simulado.
 
 Comandos soportados (separados por espacios):
   REGISTRO <codigo_lote> <palmas_evaluadas> <palmas_improductivas> <racimos_totales> <peso_promedio_kg>
@@ -14,6 +18,8 @@ Comandos soportados (separados por espacios):
   AYUDA
 """
 
+import logging
+import os
 from datetime import date
 
 from flask import Blueprint, request, jsonify
@@ -21,8 +27,16 @@ from flask import Blueprint, request, jsonify
 from app.extensions import db
 from app.models import Usuario, Lote, Finca, RegistroProduccion, SolicitudTransporte, SmsUssdLog
 from app.utils import role_required
+from app.services.twilio_sms import (
+    a_e164_co,
+    desde_e164_co,
+    enviar_sms,
+    twilio_habilitado,
+    validar_firma,
+)
 
 sms_bp = Blueprint("sms", __name__)
+logger = logging.getLogger("palma_viva.sms")
 
 AYUDA_TEXTO = (
     "Comandos disponibles:\n"
@@ -31,6 +45,8 @@ AYUDA_TEXTO = (
     "AYUDA"
 )
 
+
+# ------------------------------------------------------- mock interno ----
 
 @sms_bp.post("/sms/entrante")
 def sms_entrante():
@@ -42,18 +58,141 @@ def sms_entrante():
     if not telefono or not mensaje:
         return jsonify({"message": "telefono y mensaje son obligatorios."}), 400
 
-    usuario = Usuario.query.filter_by(telefono=telefono).first()
+    respuesta, _estado, _usuario = _procesar_mensaje(telefono, mensaje, canal, proveedor="mock")
+    return jsonify({"respuesta": respuesta}), 200
+
+
+# -------------------------------------------------- webhooks de Twilio ---
+
+@sms_bp.post("/sms/webhook/twilio")
+def sms_webhook_twilio():
+    """Webhook real de SMS entrante de Twilio. Responde con TwiML (Twilio
+    envía ese contenido como la respuesta SMS automáticamente, sin gastar
+    una llamada REST aparte). Siempre responde 200 con TwiML válido —
+    incluso ante errores internos— para evitar que Twilio reintente la
+    entrega y duplique el procesamiento."""
+    if not _firma_valida(request.form.to_dict()):
+        logger.warning("Firma de Twilio inválida en webhook entrante.")
+        return ("Firma inválida.", 403)
+
+    message_sid = request.form.get("MessageSid") or request.form.get("SmsMessageSid")
+    desde = request.form.get("From", "")
+    mensaje = (request.form.get("Body") or "").strip()
+    telefono = desde_e164_co(desde)
+
+    # Idempotencia: si Twilio reintenta la entrega del mismo mensaje
+    # (MessageSid repetido), no se vuelve a procesar ni a duplicar efectos
+    # (p. ej. un segundo censo de producción) — se responde lo mismo que la
+    # primera vez.
+    if message_sid:
+        previo = SmsUssdLog.query.filter_by(twilio_sid=message_sid).first()
+        if previo:
+            return _twiml(previo.respuesta or "")
+
+    respuesta, _estado, _usuario = _procesar_mensaje(
+        telefono, mensaje, canal="sms", proveedor="twilio", twilio_sid=message_sid
+    )
+    return _twiml(respuesta)
+
+
+@sms_bp.post("/sms/webhook/estado")
+def sms_webhook_estado():
+    """StatusCallback de Twilio: actualiza el estado de entrega
+    (queued/sent/delivered/undelivered/failed) de un SMS ya enviado o
+    recibido, identificado por MessageSid."""
+    if not _firma_valida(request.form.to_dict()):
+        logger.warning("Firma de Twilio inválida en webhook de estado.")
+        return ("Firma inválida.", 403)
+
+    message_sid = request.form.get("MessageSid")
+    nuevo_estado = request.form.get("MessageStatus")
+    if message_sid and nuevo_estado:
+        log = SmsUssdLog.query.filter_by(twilio_sid=message_sid).first()
+        if log:
+            log.estado_entrega = nuevo_estado
+            db.session.commit()
+    return ("", 204)
+
+
+# -------------------------------------------------------- notificaciones -
+
+def notificar_por_sms(usuario: Usuario, titulo: str, mensaje: str):
+    """Envío best-effort de una notificación YA creada (alerta de cosecha o
+    de logística) también por SMS real, cuando Twilio está configurado y
+    habilitado. No es una regla de negocio nueva: solo agrega un canal de
+    entrega a notificaciones que el sistema ya genera para ese usuario
+    puntual — nunca se envía en bloque a todos los usuarios.
+
+    Nunca lanza excepción: si Twilio falla o está deshabilitado, el flujo
+    que llama a esta función (crear una alerta, aceptar un transporte,
+    etc.) continúa normalmente."""
+    if not usuario or not usuario.telefono or not twilio_habilitado():
+        return
+    try:
+        cuerpo = f"Palma Viva - {titulo}: {mensaje}"[:300]
+        resultado = enviar_sms(a_e164_co(usuario.telefono), cuerpo)
+        _log(
+            telefono=usuario.telefono,
+            canal="sms",
+            comando="ALERTA",
+            payload=cuerpo,
+            respuesta=cuerpo,
+            estado="procesado" if resultado["ok"] else "error",
+            usuario_id=usuario.id,
+            direccion="saliente",
+            proveedor="twilio",
+            twilio_sid=resultado.get("sid"),
+        )
+    except Exception as e:
+        logger.warning("No se pudo enviar SMS de alerta a usuario %s: %s", usuario.id, e)
+
+
+# ----------------------------------------------------------- admin -------
+
+@sms_bp.get("/sms/logs")
+@role_required("administrador")
+def listar_logs():
+    logs = SmsUssdLog.query.order_by(SmsUssdLog.creado_en.desc()).limit(200).all()
+    return jsonify(
+        [
+            {
+                "id": l.id,
+                "telefono": l.telefono,
+                "canal": l.canal,
+                "comando": l.comando,
+                "payload": l.payload,
+                "respuesta": l.respuesta,
+                "estado": l.estado,
+                "usuario_id": l.usuario_id,
+                "creado_en": l.creado_en.isoformat() if l.creado_en else None,
+                "direccion": l.direccion,
+                "proveedor": l.proveedor,
+                "twilio_sid": l.twilio_sid,
+                "estado_entrega": l.estado_entrega,
+            }
+            for l in logs
+        ]
+    )
+
+
+# --------------------------------------------------------- lógica común --
+
+def _procesar_mensaje(telefono, mensaje, canal, proveedor, twilio_sid=None):
+    """Lógica compartida por el mock interno y el webhook real de Twilio:
+    busca el usuario, valida el rol y ejecuta el comando. Devuelve
+    (respuesta, estado, usuario)."""
     comando = mensaje.split()[0].upper() if mensaje.split() else ""
+    usuario = Usuario.query.filter_by(telefono=telefono).first()
 
     if not usuario:
         respuesta = "Número no registrado. Descarga la app Palma Viva o regístrate con un agente para usar SMS/USSD."
-        _log(telefono, canal, comando, mensaje, respuesta, "error", None)
-        return jsonify({"respuesta": respuesta}), 200
+        _log(telefono, canal, comando, mensaje, respuesta, "error", None, proveedor=proveedor, twilio_sid=twilio_sid)
+        return respuesta, "error", None
 
     if usuario.rol != "palmicultor":
         respuesta = "Esta función solo está disponible para cuentas de palmicultor."
-        _log(telefono, canal, comando, mensaje, respuesta, "error", usuario.id)
-        return jsonify({"respuesta": respuesta}), 200
+        _log(telefono, canal, comando, mensaje, respuesta, "error", usuario.id, proveedor=proveedor, twilio_sid=twilio_sid)
+        return respuesta, "error", usuario
 
     try:
         if comando == "AYUDA" or not comando:
@@ -72,30 +211,8 @@ def sms_entrante():
         respuesta = f"Error: {e}"
         estado = "error"
 
-    _log(telefono, canal, comando, mensaje, respuesta, estado, usuario.id)
-    return jsonify({"respuesta": respuesta}), 200
-
-
-@sms_bp.get("/sms/logs")
-@role_required("administrador")
-def listar_logs():
-    logs = SmsUssdLog.query.order_by(SmsUssdLog.creado_en.desc()).limit(200).all()
-    return jsonify(
-        [
-            {
-                "id": l.id,
-                "telefono": l.telefono,
-                "canal": l.canal,
-                "comando": l.comando,
-                "payload": l.payload,
-                "respuesta": l.respuesta,
-                "estado": l.estado,
-                "usuario_id": l.usuario_id,
-                "creado_en": l.creado_en.isoformat() if l.creado_en else None,
-            }
-            for l in logs
-        ]
-    )
+    _log(telefono, canal, comando, mensaje, respuesta, estado, usuario.id, proveedor=proveedor, twilio_sid=twilio_sid)
+    return respuesta, estado, usuario
 
 
 def _procesar_registro(usuario: Usuario, args, canal):
@@ -175,7 +292,34 @@ def _procesar_transporte(usuario: Usuario, args):
     return f"Solicitud de transporte #{solicitud.id} creada para el lote {codigo_lote}. Te avisaremos cuando un transportador la acepte."
 
 
-def _log(telefono, canal, comando, payload, respuesta, estado, usuario_id):
+def _firma_valida(form_params: dict) -> bool:
+    url = _url_firmada()
+    firma = request.headers.get("X-Twilio-Signature", "")
+    return validar_firma(url, form_params, firma)
+
+
+def _url_firmada() -> str:
+    """URL que Twilio usó para firmar la petición. Si el servidor corre
+    detrás de un túnel/proxy (ngrok, etc.) cuyo host externo difiere del que
+    Flask ve internamente, se puede fijar TWILIO_WEBHOOK_BASE_URL con el
+    origen público exacto (ej. https://abcd1234.ngrok-free.app)."""
+    base = os.environ.get("TWILIO_WEBHOOK_BASE_URL")
+    if base:
+        qs = f"?{request.query_string.decode()}" if request.query_string else ""
+        return base.rstrip("/") + request.path + qs
+    return request.url
+
+
+def _twiml(mensaje: str):
+    from twilio.twiml.messaging_response import MessagingResponse
+
+    resp = MessagingResponse()
+    if mensaje:
+        resp.message(mensaje)
+    return str(resp), 200, {"Content-Type": "text/xml"}
+
+
+def _log(telefono, canal, comando, payload, respuesta, estado, usuario_id, direccion="entrante", proveedor="mock", twilio_sid=None):
     db.session.add(
         SmsUssdLog(
             telefono=telefono,
@@ -185,6 +329,9 @@ def _log(telefono, canal, comando, payload, respuesta, estado, usuario_id):
             respuesta=respuesta,
             estado=estado,
             usuario_id=usuario_id,
+            direccion=direccion,
+            proveedor=proveedor,
+            twilio_sid=twilio_sid,
         )
     )
     db.session.commit()
