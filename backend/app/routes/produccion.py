@@ -24,7 +24,7 @@ def listar_produccion():
 @role_required("palmicultor")
 def crear_registro():
     data = request.get_json(force=True) or {}
-    registro, error = _build_registro(data)
+    registro, error = _build_registro(data, current_user_id())
     if error:
         return jsonify({"message": error}), 400
     db.session.add(registro)
@@ -47,7 +47,7 @@ def sync_produccion():
     resultados = []
     for item in items:
         local_id = item.get("_local_id")
-        registro, error = _build_registro(item)
+        registro, error = _build_registro(item, current_user_id())
         if error:
             resultados.append({"_local_id": local_id, "ok": False, "message": error})
             continue
@@ -67,10 +67,14 @@ def obtener_registro(registro_id):
     return jsonify(_serialize(registro))
 
 
-def _build_registro(data):
+def _build_registro(data, usuario_id):
+    """Construye (sin persistir) un RegistroProduccion validado para
+    `usuario_id`. Recibe el usuario explícito en vez de leerlo de
+    current_user_id() porque también lo invoca el motor USSD, que no tiene
+    contexto JWT."""
     lote_id = data.get("lote_id")
     lote = Lote.query.get(lote_id) if lote_id else None
-    if not lote or not Finca.query.filter_by(id=lote.finca_id, usuario_id=current_user_id()).first():
+    if not lote or not Finca.query.filter_by(id=lote.finca_id, usuario_id=usuario_id).first():
         return None, "El lote indicado no existe o no te pertenece."
 
     palmas_evaluadas = data.get("palmas_evaluadas")

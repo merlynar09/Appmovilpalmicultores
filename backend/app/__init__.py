@@ -23,6 +23,7 @@ def create_app():
     from app.routes.balance import balance_bp
     from app.routes.admin import admin_bp
     from app.routes.sms import sms_bp
+    from app.routes.ussd import ussd_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(market_bp, url_prefix="/api")
@@ -34,6 +35,7 @@ def create_app():
     app.register_blueprint(balance_bp, url_prefix="/api")
     app.register_blueprint(admin_bp, url_prefix="/api")
     app.register_blueprint(sms_bp, url_prefix="/api")
+    app.register_blueprint(ussd_bp, url_prefix="/api")
 
     @app.get("/api/health")
     def health():

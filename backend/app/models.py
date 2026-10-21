@@ -326,3 +326,38 @@ class PublicacionMercado(db.Model):
     descripcion = db.Column(db.Text)
     estado = db.Column(db.String(20), default="activa")  # activa | vendida | cancelada
     fecha_publicacion = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class UssdSesion(db.Model):
+    """Sesión de un menú USSD en curso. Persistida en base de datos (no en
+    memoria del proceso Flask) porque una sesión real puede llegar a
+    cualquier instancia del backend entre una interacción y la siguiente.
+
+    `contexto` guarda únicamente los datos mínimos que el usuario ya
+    digitó dentro del flujo actual (ej. código de lote, cantidades) — se
+    borra al terminar la sesión, nunca se usa como almacenamiento
+    permanente."""
+
+    __tablename__ = "ussd_sesiones"
+
+    id = db.Column(db.Integer, primary_key=True)
+    session_id = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    proveedor = db.Column(db.String(20), default="simulador")  # simulador | <proveedor real>
+    telefono = db.Column(db.String(20), nullable=False)
+    usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=True)
+    estado = db.Column(db.String(40), default="MENU_PRINCIPAL")  # paso/menú actual
+    contexto = db.Column(db.JSON, default=dict)
+    activa = db.Column(db.Boolean, default=True)
+    resultado_final = db.Column(db.String(20), nullable=True)  # completada|cancelada|expirada|error
+
+    # --- deduplicación / idempotencia frente a reintentos del proveedor ---
+    ultimo_request_id = db.Column(db.String(100), nullable=True)
+    ultima_entrada = db.Column(db.String(200), nullable=True)
+    ultima_respuesta = db.Column(db.Text, nullable=True)
+    ultimo_estado_previo = db.Column(db.String(40), nullable=True)
+
+    creado_en = db.Column(db.DateTime, default=datetime.utcnow)
+    actualizado_en = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    expira_en = db.Column(db.DateTime, nullable=False)
+
+    usuario = db.relationship("Usuario", backref="ussd_sesiones")

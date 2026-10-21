@@ -109,27 +109,40 @@ def test_dedup_mismo_message_sid_no_duplica(client, app, monkeypatch):
     }
     firma = _firmar(params)
 
-    resp1 = _post_webhook(client, params, firma=firma)
-    resp2 = _post_webhook(client, params, firma=firma)  # mismo SID: reintento de Twilio
-
-    assert resp1.status_code == 200
-    assert resp2.status_code == 200
-    assert resp1.data == resp2.data
-
     with app.app_context():
-        logs = SmsUssdLog.query.filter_by(twilio_sid=message_sid).all()
-        assert len(logs) == 1
+        # Captura el estado ANTES de esta prueba: así el conteo no se ve
+        # afectado por datos huérfanos de una ejecución anterior fallida.
+        ids_antes = {
+            r.id for r in RegistroProduccion.query.filter_by(peso_promedio_racimo=16.0, fuente="sms").all()
+        }
 
-        registros = RegistroProduccion.query.filter_by(peso_promedio_racimo=16.0, fuente="sms").all()
-        # Solo debió crearse UN censo (el del primer POST), no dos.
-        creados_por_esta_prueba = registros
-        assert len(creados_por_esta_prueba) == 1
+    try:
+        resp1 = _post_webhook(client, params, firma=firma)
+        resp2 = _post_webhook(client, params, firma=firma)  # mismo SID: reintento de Twilio
 
-        for r in creados_por_esta_prueba:
-            db.session.delete(r)
-        for l in logs:
-            db.session.delete(l)
-        db.session.commit()
+        assert resp1.status_code == 200
+        assert resp2.status_code == 200
+        assert resp1.data == resp2.data
+
+        with app.app_context():
+            logs = SmsUssdLog.query.filter_by(twilio_sid=message_sid).all()
+            assert len(logs) == 1
+
+            registros = RegistroProduccion.query.filter_by(peso_promedio_racimo=16.0, fuente="sms").all()
+            creados_por_esta_prueba = [r for r in registros if r.id not in ids_antes]
+            # Solo debió crearse UN censo nuevo (el del primer POST), no dos.
+            assert len(creados_por_esta_prueba) == 1
+    finally:
+        # Limpieza SIEMPRE, incluso si una aserción anterior falló — para no
+        # ir arrastrando datos huérfanos a la siguiente ejecución.
+        with app.app_context():
+            registros = RegistroProduccion.query.filter_by(peso_promedio_racimo=16.0, fuente="sms").all()
+            for r in registros:
+                if r.id not in ids_antes:
+                    db.session.delete(r)
+            for l in SmsUssdLog.query.filter_by(twilio_sid=message_sid).all():
+                db.session.delete(l)
+            db.session.commit()
 
 
 def test_webhook_transporte_crea_solicitud(client, app, monkeypatch):

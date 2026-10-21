@@ -101,6 +101,16 @@ palma-viva/
         └── routes/       auth, market, logistics
 ```
 
+## SMS y USSD
+
+El acceso sin datos móviles tiene dos canales, documentados por separado:
+
+- **SMS real (Twilio)**: envío y recepción verificados con un operador real.
+- **USSD con menú interactivo**: motor y sesión completos, probados contra un
+  simulador interno — ver [`backend/docs/USSD.md`](backend/docs/USSD.md)
+  para la arquitectura, qué falta para un proveedor real en Colombia y cómo
+  probarlo desde la app (pantalla "Simulador SMS/USSD" → pestaña "Sesión USSD").
+
 ## Estado actual (Fase 1)
 
 - ✅ Registro e inicio de sesión (JWT) — Palmicultor y Comprador
