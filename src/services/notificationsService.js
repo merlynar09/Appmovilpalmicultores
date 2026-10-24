@@ -64,10 +64,10 @@ function getNotificationsModule() {
 }
 
 export async function initNotifications() {
-  const N = getNotificationsModule();
-  if (!N) return;
-
   try {
+    const N = getNotificationsModule();
+    if (!N) return;
+
     N.setNotificationHandler({
       handleNotification: async () => ({
         shouldShowAlert: true,
@@ -99,10 +99,10 @@ export async function initNotifications() {
 }
 
 export function addNotificationTapListener(onTap) {
-  const N = getNotificationsModule();
-  if (!N) return { remove: () => {} };
-
   try {
+    const N = getNotificationsModule();
+    if (!N) return { remove: () => {} };
+
     return N.addNotificationResponseReceivedListener((response) => {
       const data = response?.notification?.request?.content?.data;
       if (data) onTap(data);

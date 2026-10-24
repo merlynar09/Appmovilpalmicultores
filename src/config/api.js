@@ -7,14 +7,17 @@
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export const API_BASE_URL = 'http://192.168.1.13:5000/api';
+export const API_BASE_URL = 'https://pentagram-rink-shindig.ngrok-free.dev/api';
 
 async function getToken() {
   return AsyncStorage.getItem('@auth_token');
 }
 
 export async function apiRequest(path, { method = 'GET', body, auth = true } = {}) {
-  const headers = { 'Content-Type': 'application/json' };
+  // El header ngrok-skip-browser-warning evita la página de advertencia que
+  // ngrok (plan gratuito) inserta en la primera petición de cada túnel nuevo;
+  // no afecta en nada cuando NO se usa ngrok (el backend simplemente la ignora).
+  const headers = { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' };
   if (auth) {
     const token = await getToken();
     if (token) headers.Authorization = `Bearer ${token}`;

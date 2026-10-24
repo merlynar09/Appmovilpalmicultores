@@ -255,6 +255,9 @@ class EstadoVia(db.Model):
     estado = db.Column(db.String(20), default="habilitada")
     # habilitada | precaucion | restringida | cerrada
     observaciones = db.Column(db.Text)
+    origen = db.Column(db.String(150), nullable=True)
+    destino = db.Column(db.String(150), nullable=True)
+    distancia_km = db.Column(db.Float, nullable=True)
     actualizado_por = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=True)
     fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -361,3 +364,18 @@ class UssdSesion(db.Model):
     expira_en = db.Column(db.DateTime, nullable=False)
 
     usuario = db.relationship("Usuario", backref="ussd_sesiones")
+
+
+class ContenidoMensaje(db.Model):
+    """Textos de SMS/USSD editables por el administrador (CU17). Si no existe
+    fila para una clave, el servicio que la consulta usa su texto por
+    defecto (hardcodeado) — esta tabla solo guarda las personalizaciones."""
+
+    __tablename__ = "contenidos_mensajes"
+
+    id = db.Column(db.Integer, primary_key=True)
+    clave = db.Column(db.String(50), unique=True, nullable=False, index=True)
+    canal = db.Column(db.String(10), nullable=False)  # sms | ussd
+    texto = db.Column(db.Text, nullable=False)
+    actualizado_por = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=True)
+    fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

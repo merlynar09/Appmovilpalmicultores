@@ -33,11 +33,12 @@ from app.models import (
     Usuario,
     UssdSesion,
 )
+from app.services.contenido import obtener_contenido
 
 TTL_SEGUNDOS = int(os.environ.get("USSD_SESSION_TTL_SEGUNDOS", "180"))
 MAX_ITEMS_LISTA = 5  # pantallas USSD son pequeñas; se trunca con aviso si hay más
 
-MENU_PRINCIPAL_TEXTO = (
+MENU_PRINCIPAL_TEXTO_DEFECTO = (
     "Palma Viva\n"
     "1 Precio de palma\n"
     "2 Compradores\n"
@@ -50,17 +51,34 @@ MENU_PRINCIPAL_TEXTO = (
     "0 Salir"
 )
 
-AYUDA_TEXTO = (
+AYUDA_TEXTO_DEFECTO = (
     "Palma Viva USSD: consulta precios, compradores, transporte y vias; "
     "registra tu censo de produccion y pide transporte, todo sin internet. "
     "0 Volver al menu."
 )
+
+# Valores efectivos usados por todo el resto del módulo (funciones y lambdas
+# de abajo leen estos nombres globales en cada llamada, no al definirse) —
+# _refrescar_contenido_editable() los actualiza justo antes de procesar cada
+# entrada, para que un cambio del administrador (CU17) se refleje de
+# inmediato sin reiniciar el servidor. Si la consulta a BD falla,
+# obtener_contenido() ya devuelve el texto por defecto, así que esto nunca
+# puede romper el flujo USSD.
+MENU_PRINCIPAL_TEXTO = MENU_PRINCIPAL_TEXTO_DEFECTO
+AYUDA_TEXTO = AYUDA_TEXTO_DEFECTO
+
+
+def _refrescar_contenido_editable():
+    global MENU_PRINCIPAL_TEXTO, AYUDA_TEXTO
+    MENU_PRINCIPAL_TEXTO = obtener_contenido("ussd_menu_principal", MENU_PRINCIPAL_TEXTO_DEFECTO)
+    AYUDA_TEXTO = obtener_contenido("ussd_ayuda", AYUDA_TEXTO_DEFECTO)
 
 
 def procesar_entrada(telefono, entrada, session_id, proveedor="simulador", request_id=None, nueva_sesion=False):
     """Punto de entrada único del motor. Devuelve
     {"respuesta": str, "continuar": bool}. NUNCA lanza excepción de negocio
     hacia el llamador: cualquier error se convierte en un mensaje breve."""
+    _refrescar_contenido_editable()
     telefono = (telefono or "").strip()
     entrada = (entrada or "").strip()
 

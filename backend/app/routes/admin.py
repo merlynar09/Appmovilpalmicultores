@@ -9,10 +9,22 @@ from app.models import (
     PublicacionMercado,
     SolicitudTransporte,
     Comprador,
+    Precio,
+    ContenidoMensaje,
 )
-from app.utils import role_required
+from app.utils import role_required, current_user_id
+from app.routes.market import crear_precio, _serialize_precio
+from app.services.contenido import obtener_contenido, CLAVES_CONTENIDO
+from app.services.ussd_engine import MENU_PRINCIPAL_TEXTO_DEFECTO, AYUDA_TEXTO_DEFECTO
+from app.routes.sms import AYUDA_TEXTO_DEFECTO as SMS_AYUDA_TEXTO_DEFECTO
 
 admin_bp = Blueprint("admin", __name__)
+
+_TEXTOS_POR_DEFECTO = {
+    "ussd_menu_principal": MENU_PRINCIPAL_TEXTO_DEFECTO,
+    "ussd_ayuda": AYUDA_TEXTO_DEFECTO,
+    "sms_ayuda": SMS_AYUDA_TEXTO_DEFECTO,
+}
 
 
 @admin_bp.get("/admin/usuarios")
@@ -124,6 +136,154 @@ def reportes_generales():
     )
 
 
+# ------------------------------------------------- compradores (CU13) ----
+
+@admin_bp.get("/admin/compradores")
+@role_required("administrador")
+def listar_compradores_admin():
+    compradores = Comprador.query.order_by(Comprador.id.desc()).all()
+    return jsonify([_serialize_comprador(c) for c in compradores])
+
+
+@admin_bp.post("/admin/compradores")
+@role_required("administrador")
+def crear_comprador_admin():
+    """Crea el perfil `Comprador` para un usuario con rol comprador que no
+    tenga uno todavía (en el registro normal ya se crea automáticamente —
+    esto cubre solo el caso borde de un usuario sin perfil asociado)."""
+    data = request.get_json(force=True) or {}
+    usuario_id = data.get("usuario_id")
+    usuario = Usuario.query.get(usuario_id) if usuario_id else None
+    if not usuario or usuario.rol != "comprador":
+        return jsonify({"message": "El usuario indicado no existe o no tiene rol comprador."}), 400
+    if Comprador.query.filter_by(usuario_id=usuario.id).first():
+        return jsonify({"message": "Ese usuario ya tiene un perfil de comprador."}), 409
+
+    empresa = (data.get("empresa") or usuario.nombre_completo).strip()
+    comprador = Comprador(
+        usuario_id=usuario.id,
+        empresa=empresa,
+        descripcion=(data.get("descripcion") or "").strip() or None,
+        telefono=(data.get("telefono") or "").strip() or None,
+        correo=(data.get("correo") or "").strip() or None,
+        ubicacion=(data.get("ubicacion") or "").strip() or None,
+        estado="activo",
+    )
+    db.session.add(comprador)
+    db.session.commit()
+    return jsonify(_serialize_comprador(comprador)), 201
+
+
+@admin_bp.put("/admin/compradores/<int:comprador_id>")
+@role_required("administrador")
+def editar_comprador_admin(comprador_id):
+    comprador = Comprador.query.get(comprador_id)
+    if not comprador:
+        return jsonify({"message": "Comprador no encontrado."}), 404
+
+    data = request.get_json(force=True) or {}
+    for campo in ("empresa", "descripcion", "telefono", "correo", "ubicacion"):
+        if campo in data:
+            setattr(comprador, campo, (data[campo] or "").strip() or None)
+
+    db.session.commit()
+    return jsonify(_serialize_comprador(comprador))
+
+
+@admin_bp.patch("/admin/compradores/<int:comprador_id>/estado")
+@role_required("administrador")
+def cambiar_estado_comprador_admin(comprador_id):
+    comprador = Comprador.query.get(comprador_id)
+    if not comprador:
+        return jsonify({"message": "Comprador no encontrado."}), 404
+
+    data = request.get_json(force=True) or {}
+    nuevo_estado = data.get("estado")
+    if nuevo_estado not in ("activo", "inactivo"):
+        return jsonify({"message": "Estado inválido."}), 400
+
+    comprador.estado = nuevo_estado
+    db.session.commit()
+    return jsonify(_serialize_comprador(comprador))
+
+
+@admin_bp.post("/admin/compradores/<int:comprador_id>/precios")
+@role_required("administrador")
+def publicar_precio_admin(comprador_id):
+    """CU12 ampliado: el administrador también puede publicar/editar el
+    precio de cualquier comprador — el palmicultor sigue sin poder fijar
+    precios, eso no cambia. Reutiliza exactamente la misma lógica que usa
+    el comprador para su propio precio (`market.crear_precio`)."""
+    comprador = Comprador.query.get(comprador_id)
+    if not comprador:
+        return jsonify({"message": "Comprador no encontrado."}), 404
+
+    data = request.get_json(force=True) or {}
+    valor = data.get("valor_moneda")
+    if not valor or float(valor) <= 0:
+        return jsonify({"message": "El valor del precio es obligatorio."}), 400
+
+    precio = crear_precio(comprador, valor, data.get("producto"), data.get("unidad"))
+    return jsonify(_serialize_precio(precio)), 201
+
+
+# ---------------------------------------- contenido SMS/USSD (CU17) ------
+
+@admin_bp.get("/admin/contenido-sms-ussd")
+@role_required("administrador")
+def listar_contenido_sms_ussd():
+    return jsonify(
+        [
+            {
+                "clave": clave,
+                "canal": canal,
+                "texto": obtener_contenido(clave, _TEXTOS_POR_DEFECTO[clave]),
+                "texto_por_defecto": _TEXTOS_POR_DEFECTO[clave],
+                "personalizado": ContenidoMensaje.query.filter_by(clave=clave).first() is not None,
+            }
+            for clave, canal in CLAVES_CONTENIDO.items()
+        ]
+    )
+
+
+@admin_bp.put("/admin/contenido-sms-ussd/<clave>")
+@role_required("administrador")
+def editar_contenido_sms_ussd(clave):
+    if clave not in CLAVES_CONTENIDO:
+        return jsonify({"message": "Clave de contenido inválida."}), 400
+
+    data = request.get_json(force=True) or {}
+    texto = (data.get("texto") or "").strip()
+    if not texto:
+        return jsonify({"message": "El texto es obligatorio."}), 400
+
+    fila = ContenidoMensaje.query.filter_by(clave=clave).first()
+    if fila:
+        fila.texto = texto
+        fila.actualizado_por = current_user_id()
+    else:
+        fila = ContenidoMensaje(
+            clave=clave,
+            canal=CLAVES_CONTENIDO[clave],
+            texto=texto,
+            actualizado_por=current_user_id(),
+        )
+        db.session.add(fila)
+    db.session.commit()
+    return jsonify({"clave": clave, "texto": fila.texto, "personalizado": True})
+
+
+@admin_bp.delete("/admin/contenido-sms-ussd/<clave>")
+@role_required("administrador")
+def restaurar_contenido_sms_ussd(clave):
+    if clave not in CLAVES_CONTENIDO:
+        return jsonify({"message": "Clave de contenido inválida."}), 400
+
+    ContenidoMensaje.query.filter_by(clave=clave).delete()
+    db.session.commit()
+    return jsonify({"clave": clave, "texto": _TEXTOS_POR_DEFECTO[clave], "personalizado": False})
+
+
 def _serialize_usuario(u: Usuario):
     return {
         "id": u.id,
@@ -133,6 +293,24 @@ def _serialize_usuario(u: Usuario):
         "rol": u.rol,
         "estado": u.estado,
         "fecha_registro": u.fecha_registro.isoformat() if u.fecha_registro else None,
+    }
+
+
+def _serialize_comprador(c: Comprador):
+    usuario = Usuario.query.get(c.usuario_id)
+    precio_activo = Precio.query.filter_by(comprador_id=c.id, estado="activo").first()
+    return {
+        "id": c.id,
+        "usuario_id": c.usuario_id,
+        "nombre_usuario": usuario.nombre_completo if usuario else None,
+        "empresa": c.empresa,
+        "descripcion": c.descripcion,
+        "telefono": c.telefono,
+        "correo": c.correo,
+        "ubicacion": c.ubicacion,
+        "estado": c.estado,
+        "precio_vigente": float(precio_activo.valor_moneda) if precio_activo else None,
+        "precio_unidad": precio_activo.unidad if precio_activo else None,
     }
 
 

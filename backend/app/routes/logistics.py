@@ -337,6 +337,9 @@ def reportar_via():
         municipio=(data.get("municipio") or "Tumaco").strip(),
         estado=estado,
         observaciones=(data.get("observaciones") or "").strip() or None,
+        origen=(data.get("origen") or "").strip() or None,
+        destino=(data.get("destino") or "").strip() or None,
+        distancia_km=data.get("distancia_km"),
         actualizado_por=current_user_id(),
     )
     db.session.add(via)
@@ -357,6 +360,18 @@ def actualizar_via(via_id):
         via.estado = data["estado"]
     if "observaciones" in data:
         via.observaciones = data["observaciones"]
+    if "via" in data:
+        via_nombre = (data.get("via") or "").strip()
+        if not via_nombre:
+            return jsonify({"message": "El nombre de la vía no puede quedar vacío."}), 400
+        via.via = via_nombre
+    if "municipio" in data:
+        via.municipio = (data.get("municipio") or "Tumaco").strip()
+    for campo in ("origen", "destino"):
+        if campo in data:
+            setattr(via, campo, (data[campo] or "").strip() or None)
+    if "distancia_km" in data:
+        via.distancia_km = data["distancia_km"]
     via.actualizado_por = current_user_id()
     db.session.commit()
     return jsonify(_serialize_via(via))
@@ -428,6 +443,9 @@ def _serialize_via(v: EstadoVia):
         "municipio": v.municipio,
         "estado": v.estado,
         "observaciones": v.observaciones,
+        "origen": v.origen,
+        "destino": v.destino,
+        "distancia_km": v.distancia_km,
         "fecha_actualizacion": v.fecha_actualizacion.isoformat() if v.fecha_actualizacion else None,
     }
 

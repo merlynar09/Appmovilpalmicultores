@@ -74,20 +74,29 @@ def publicar_precio():
     if not valor or float(valor) <= 0:
         return jsonify({"message": "El valor del precio es obligatorio."}), 400
 
+    precio = crear_precio(comprador, valor, data.get("producto"), data.get("unidad"))
+    return jsonify(_serialize_precio(precio)), 201
+
+
+def crear_precio(comprador, valor, producto=None, unidad=None):
+    """Publica un precio nuevo para `comprador` y desactiva el anterior.
+    Reutilizada por el propio comprador (arriba) y por el administrador
+    (`admin.py`, CU12 ampliado: el admin también puede publicar/editar el
+    precio de cualquier comprador) — misma lógica, un solo lugar."""
     # Solo un precio activo por comprador: el nuevo reemplaza al anterior.
     Precio.query.filter_by(comprador_id=comprador.id, estado="activo").update({"estado": "inactivo"})
 
     precio = Precio(
         comprador_id=comprador.id,
-        producto=(data.get("producto") or "Fruto de palma de aceite").strip(),
+        producto=(producto or "Fruto de palma de aceite").strip(),
         valor_moneda=float(valor),
-        unidad=(data.get("unidad") or "Tonelada").strip(),
+        unidad=(unidad or "Tonelada").strip(),
         fuente=comprador.empresa,
         estado="activo",
     )
     db.session.add(precio)
     db.session.commit()
-    return jsonify(_serialize_precio(precio)), 201
+    return precio
 
 
 @market_bp.get("/compradores/<int:comprador_id>")

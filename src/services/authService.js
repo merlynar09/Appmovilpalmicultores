@@ -43,6 +43,12 @@ export async function loginUser({ identifier, password, remember }) {
   return data.usuario; // { id, nombre_completo, rol, ... }
 }
 
+export async function actualizarPerfil(payload) {
+  const usuarioActualizado = await apiRequest('/auth/perfil', { method: 'PATCH', body: payload });
+  await AsyncStorage.setItem('@auth_user', JSON.stringify(usuarioActualizado));
+  return usuarioActualizado;
+}
+
 export async function logoutUser() {
   await AsyncStorage.multiRemove(['@auth_token', '@auth_user']);
 }

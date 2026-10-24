@@ -7,6 +7,7 @@ from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identi
 
 from app.extensions import db
 from app.models import Usuario, Comprador, Transportador, PasswordResetToken
+from app.utils import current_user_id
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -88,6 +89,46 @@ def me():
     usuario = Usuario.query.get(int(get_jwt_identity()))
     if not usuario:
         return jsonify({"message": "Usuario no encontrado."}), 404
+    return jsonify(_serialize(usuario))
+
+
+@auth_bp.patch("/perfil")
+@jwt_required()
+def editar_perfil():
+    """CU9: cualquier usuario autenticado edita sus propios datos básicos.
+    El rol NUNCA se puede cambiar por esta vía, aunque venga en el body —
+    requisito explícito del caso de uso (un usuario común no puede
+    autoasignarse otro rol)."""
+    usuario = Usuario.query.get(current_user_id())
+    if not usuario:
+        return jsonify({"message": "Usuario no encontrado."}), 404
+
+    data = request.get_json(force=True) or {}
+
+    if "nombre_completo" in data:
+        nombre_completo = (data.get("nombre_completo") or "").strip()
+        if not nombre_completo:
+            return jsonify({"message": "El nombre no puede quedar vacío."}), 400
+        usuario.nombre_completo = nombre_completo
+
+    if "telefono" in data:
+        telefono = (data.get("telefono") or "").strip()
+        if not telefono:
+            return jsonify({"message": "El teléfono no puede quedar vacío."}), 400
+        existente = Usuario.query.filter(Usuario.telefono == telefono, Usuario.id != usuario.id).first()
+        if existente:
+            return jsonify({"message": "Ya existe una cuenta con ese teléfono."}), 409
+        usuario.telefono = telefono
+
+    if "correo" in data:
+        correo = (data.get("correo") or "").strip() or None
+        if correo:
+            existente = Usuario.query.filter(Usuario.correo == correo, Usuario.id != usuario.id).first()
+            if existente:
+                return jsonify({"message": "Ya existe una cuenta con ese correo."}), 409
+        usuario.correo = correo
+
+    db.session.commit()
     return jsonify(_serialize(usuario))
 
 

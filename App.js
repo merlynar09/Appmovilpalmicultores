@@ -30,6 +30,7 @@ import BalanceIndustrialScreen from './src/screens/palmicultor/BalanceIndustrial
 import SmsSimuladorScreen from './src/screens/palmicultor/SmsSimuladorScreen';
 import CompradoresListScreen from './src/screens/palmicultor/CompradoresListScreen';
 import CompradorDetalleScreen from './src/screens/palmicultor/CompradorDetalleScreen';
+import PuntosComercializacionScreen from './src/screens/palmicultor/PuntosComercializacionScreen';
 
 import CompradorDashboard from './src/screens/comprador/CompradorDashboard';
 import MercadoVitrinaScreen from './src/screens/comprador/MercadoVitrinaScreen';
@@ -46,6 +47,9 @@ import AdminDashboard from './src/screens/admin/AdminDashboard';
 import AdminUsuariosScreen from './src/screens/admin/AdminUsuariosScreen';
 import AdminTransportadoresScreen from './src/screens/admin/AdminTransportadoresScreen';
 import AdminReportesScreen from './src/screens/admin/AdminReportesScreen';
+import AdminCompradoresScreen from './src/screens/admin/AdminCompradoresScreen';
+import AdminPuntosScreen from './src/screens/admin/AdminPuntosScreen';
+import AdminContenidoSmsUssdScreen from './src/screens/admin/AdminContenidoSmsUssdScreen';
 
 import EstadoViasScreen from './src/screens/common/EstadoViasScreen';
 import PerfilScreen from './src/screens/common/PerfilScreen';
@@ -132,6 +136,7 @@ export default function App() {
         <Stack.Screen name="SmsSimulador" component={SmsSimuladorScreen} options={{ title: 'Simulador SMS/USSD' }} />
         <Stack.Screen name="Compradores" component={CompradoresListScreen} options={{ title: 'Compradores en tu zona' }} />
         <Stack.Screen name="CompradorDetalle" component={CompradorDetalleScreen} options={{ title: 'Comprador' }} />
+        <Stack.Screen name="PuntosComercializacion" component={PuntosComercializacionScreen} options={{ title: 'Puntos de comercialización' }} />
 
         {/* --- Comprador --- */}
         <Stack.Screen name="CompradorDashboard" component={CompradorDashboard} options={{ headerShown: false }} />
@@ -151,6 +156,9 @@ export default function App() {
         <Stack.Screen name="AdminUsuarios" component={AdminUsuariosScreen} options={{ title: 'Usuarios' }} />
         <Stack.Screen name="AdminTransportadores" component={AdminTransportadoresScreen} options={{ title: 'Transportadores' }} />
         <Stack.Screen name="AdminReportes" component={AdminReportesScreen} options={{ title: 'Reportes' }} />
+        <Stack.Screen name="AdminCompradores" component={AdminCompradoresScreen} options={{ title: 'Compradores' }} />
+        <Stack.Screen name="AdminPuntos" component={AdminPuntosScreen} options={{ title: 'Puntos de comercialización' }} />
+        <Stack.Screen name="AdminContenidoSmsUssd" component={AdminContenidoSmsUssdScreen} options={{ title: 'Contenido SMS/USSD' }} />
 
         {/* --- Compartidas --- */}
         <Stack.Screen name="EstadoVias" component={EstadoViasScreen} options={{ title: 'Estado de vías' }} />

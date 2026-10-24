@@ -34,16 +34,22 @@ from app.services.twilio_sms import (
     twilio_habilitado,
     validar_firma,
 )
+from app.services.contenido import obtener_contenido
 
 sms_bp = Blueprint("sms", __name__)
 logger = logging.getLogger("palma_viva.sms")
 
-AYUDA_TEXTO = (
+AYUDA_TEXTO_DEFECTO = (
     "Comandos disponibles:\n"
     "REGISTRO <lote> <palmasEvaluadas> <palmasImproductivas> <racimos> <pesoPromedioKg>\n"
     "TRANSPORTE <lote> <toneladas> <fechaAAAA-MM-DD>\n"
     "AYUDA"
 )
+
+# Ver nota en app/services/ussd_engine.py: este nombre se reasigna en cada
+# llamada a _procesar_mensaje() para reflejar ediciones del administrador
+# (CU17) sin reiniciar el servidor, con fallback seguro al texto de arriba.
+AYUDA_TEXTO = AYUDA_TEXTO_DEFECTO
 
 
 # ------------------------------------------------------- mock interno ----
@@ -181,6 +187,8 @@ def _procesar_mensaje(telefono, mensaje, canal, proveedor, twilio_sid=None):
     """Lógica compartida por el mock interno y el webhook real de Twilio:
     busca el usuario, valida el rol y ejecuta el comando. Devuelve
     (respuesta, estado, usuario)."""
+    global AYUDA_TEXTO
+    AYUDA_TEXTO = obtener_contenido("sms_ayuda", AYUDA_TEXTO_DEFECTO)
     comando = mensaje.split()[0].upper() if mensaje.split() else ""
     usuario = Usuario.query.filter_by(telefono=telefono).first()
 

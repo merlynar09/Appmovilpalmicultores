@@ -70,7 +70,12 @@ export default function AdminDashboard({ navigation }) {
         <ShortcutCard icon="people-outline" title="Usuarios" onPress={() => navigation.navigate('AdminUsuarios')} />
         <ShortcutCard icon="bar-chart-outline" title="Reportes" onPress={() => navigation.navigate('AdminReportes')} />
       </View>
+      <View style={styles.gridRow}>
+        <ShortcutCard icon="business-outline" title="Compradores" onPress={() => navigation.navigate('AdminCompradores')} />
+        <ShortcutCard icon="location-outline" title="Puntos de comercialización" onPress={() => navigation.navigate('AdminPuntos')} />
+      </View>
       <ShortcutCard icon="trail-sign-outline" title="Estado de vías" onPress={() => navigation.navigate('EstadoVias')} wide />
+      <ShortcutCard icon="chatbubble-ellipses-outline" title="Contenido SMS/USSD" onPress={() => navigation.navigate('AdminContenidoSmsUssd')} wide />
     </ScrollView>
   );
 }

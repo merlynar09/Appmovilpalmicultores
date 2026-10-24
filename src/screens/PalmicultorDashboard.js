@@ -178,6 +178,7 @@ export default function PalmicultorDashboard({ navigation }) {
         <ShortcutCard icon="storefront-outline" title="Mis Publicaciones" onPress={() => navigation.navigate('MisPublicaciones')} />
         <ShortcutCard icon="flask-outline" title="Balance Industrial" onPress={() => navigation.navigate('BalanceIndustrial')} />
       </View>
+      <ShortcutCard icon="location-outline" title="Puntos de Comercialización" onPress={() => navigation.navigate('PuntosComercializacion')} wide />
 
       {/* Herramientas */}
       <Text style={styles.sectionTitle}>Herramientas</Text>
