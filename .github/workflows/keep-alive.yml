@@ -1,0 +1,19 @@
+name: Mantener activo el backend (Render + Supabase)
+
+# Hace ping periódico a /api/health para que Render no "duerma" el servicio
+# y Supabase no pause la base de datos por inactividad (pausa automática a
+# los 7 días sin uso). Gratis: corre en GitHub Actions, no en ningún servidor
+# que la usuaria tenga que mantener prendido.
+
+on:
+  schedule:
+    - cron: "0 12 */3 * *" # cada 3 días a las 12:00 UTC
+  workflow_dispatch: {}
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping /api/health
+        run: |
+          curl -fsS "${{ secrets.BACKEND_HEALTH_URL }}" || exit 1

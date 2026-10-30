@@ -5,8 +5,15 @@ Uso:
 
 Es idempotente: si el teléfono ya existe, reutiliza el registro en vez de
 duplicarlo, así que se puede correr varias veces sin problema.
+
+DEV-F2-11: inserta usuarios con contraseñas conocidas (admin123, palma123,
+etc.) — por eso exige SEED_CONFIRM=yes en el entorno antes de tocar la base,
+para que no se ejecute por accidente contra algo que no sea una base de
+desarrollo/pruebas desechable.
 """
-from datetime import date, timedelta, datetime
+import os
+import sys
+from datetime import date, timedelta, datetime, timezone
 
 from werkzeug.security import generate_password_hash
 
@@ -50,7 +57,22 @@ def get_or_create_usuario(nombre, telefono, password, rol, correo=None):
     return usuario
 
 
+def _confirmar_ambiente_seguro():
+    if os.environ.get("SEED_CONFIRM", "").lower() == "yes":
+        return
+    print(
+        "seed.py crea usuarios con contraseñas conocidas (admin123, palma123, "
+        "compra123, transp123) — pensado SOLO para una base de desarrollo/pruebas.\n"
+        "Para confirmar que esta base es desechable, vuelve a ejecutar con "
+        "SEED_CONFIRM=yes, por ejemplo:\n"
+        "  SEED_CONFIRM=yes python seed.py   (bash)\n"
+        '  $env:SEED_CONFIRM="yes"; python seed.py   (PowerShell)'
+    )
+    sys.exit(1)
+
+
 def run():
+    _confirmar_ambiente_seguro()
     app = create_app()
     with app.app_context():
         # --- usuarios base -------------------------------------------------
@@ -249,7 +271,9 @@ def run():
             pronostico = PronosticoProduccion(
                 lote_id=lote.id,
                 registro_produccion_id=registro.id,
-                fecha_calculo=datetime.utcnow(),
+                # naive-UTC a propósito: la columna no es timezone-aware y el
+                # resto del proyecto usa datetimes naive consistentemente.
+                fecha_calculo=datetime.now(timezone.utc).replace(tzinfo=None),
                 palmas_totales=palmas_totales,
                 palmas_improductivas_muestra=palmas_improductivas_muestra,
                 palmas_productivas=palmas_productivas,

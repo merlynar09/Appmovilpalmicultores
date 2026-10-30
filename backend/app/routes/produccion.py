@@ -58,15 +58,6 @@ def sync_produccion():
     return jsonify({"resultados": resultados})
 
 
-@produccion_bp.get("/produccion/<int:registro_id>")
-@role_required("palmicultor")
-def obtener_registro(registro_id):
-    registro = _get_own_registro(registro_id)
-    if not registro:
-        return jsonify({"message": "Registro no encontrado."}), 404
-    return jsonify(_serialize(registro))
-
-
 def _build_registro(data, usuario_id):
     """Construye (sin persistir) un RegistroProduccion validado para
     `usuario_id`. Recibe el usuario explícito en vez de leerlo de
@@ -119,16 +110,6 @@ def _build_registro(data, usuario_id):
     )
     registro._porcentaje_muestra = porcentaje_muestra  # solo para la respuesta serializada
     return registro, None
-
-
-def _get_own_registro(registro_id):
-    registro = RegistroProduccion.query.get(registro_id)
-    if not registro:
-        return None
-    lote = Lote.query.get(registro.lote_id)
-    if not lote or not Finca.query.filter_by(id=lote.finca_id, usuario_id=current_user_id()).first():
-        return None
-    return registro
 
 
 def _serialize(r: RegistroProduccion):

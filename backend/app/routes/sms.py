@@ -26,7 +26,7 @@ from flask import Blueprint, request, jsonify
 
 from app.extensions import db
 from app.models import Usuario, Lote, Finca, RegistroProduccion, SolicitudTransporte, SmsUssdLog
-from app.utils import role_required
+from app.utils import role_required, simulador_sms_ussd_habilitado, simulador_deshabilitado_response
 from app.services.twilio_sms import (
     a_e164_co,
     desde_e164_co,
@@ -56,6 +56,9 @@ AYUDA_TEXTO = AYUDA_TEXTO_DEFECTO
 
 @sms_bp.post("/sms/entrante")
 def sms_entrante():
+    if not simulador_sms_ussd_habilitado():
+        return simulador_deshabilitado_response()
+
     data = request.get_json(force=True) or {}
     telefono = (data.get("telefono") or "").strip()
     canal = data.get("canal") if data.get("canal") in ("sms", "ussd") else "sms"

@@ -1,7 +1,22 @@
+import os
 from functools import wraps
 
 from flask import jsonify
 from flask_jwt_extended import get_jwt, get_jwt_identity, verify_jwt_in_request
+
+
+def simulador_sms_ussd_habilitado():
+    """MOD-05: puerta por ambiente para los endpoints de simulación SMS/USSD
+    (/sms/entrante, /ussd/simular). No pueden exigir JWT — simulan justamente
+    a alguien SIN la app ni sesión, por un canal de texto — así que en vez de
+    autenticación se protegen apagándolos por completo cuando no se necesitan
+    (ej. un despliegue real), vía SMS_USSD_SIMULATOR_ENABLED. Por defecto
+    quedan encendidos para no romper las pruebas/demo actuales."""
+    return os.environ.get("SMS_USSD_SIMULATOR_ENABLED", "true").lower() != "false"
+
+
+def simulador_deshabilitado_response():
+    return jsonify({"message": "El simulador SMS/USSD está deshabilitado en este ambiente."}), 404
 
 
 def role_required(*roles):

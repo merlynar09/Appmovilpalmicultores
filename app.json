@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
+    "scheme": "palmaviva",
     "android": {
       "package": "com.palmaviva.app",
       "adaptiveIcon": {
@@ -26,7 +26,16 @@
         {
           "color": "#1B4D3E"
         }
-      ]
-    ]
+      ],
+      "expo-secure-store",
+      "expo-font",
+      "expo-asset"
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "ec79317c-7043-43c7-b23b-fc3cf900ea9e"
+      }
+    },
+    "owner": "merlyn09"
   }
 }

@@ -1,4 +1,10 @@
 Flask==3.0.3
+# SQLAlchemy fijado explícitamente (DEV-F2-03): Flask-SQLAlchemy por sí solo
+# no fija una versión, y una resolución distinta puede cambiar cómo se
+# interpreta el esquema "postgresql://" del DATABASE_URL frente al driver
+# psycopg2 instalado. config.py además normaliza la URL a
+# "postgresql+psycopg2://" explícitamente para no depender de eso.
+SQLAlchemy==2.0.54
 Flask-SQLAlchemy==3.1.1
 Flask-Migrate==4.0.7
 Flask-JWT-Extended==4.6.0
@@ -8,3 +14,4 @@ python-dotenv==1.0.1
 twilio==9.12.0
 truststore==0.10.5
 pytest==9.1.1
+gunicorn==23.0.0

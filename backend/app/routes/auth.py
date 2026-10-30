@@ -3,7 +3,7 @@ from datetime import datetime, timedelta
 
 from flask import Blueprint, request, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from flask_jwt_extended import create_access_token, jwt_required
 
 from app.extensions import db
 from app.models import Usuario, Comprador, Transportador, PasswordResetToken
@@ -81,15 +81,6 @@ def login():
 
     token = create_access_token(identity=str(usuario.id), additional_claims={"rol": usuario.rol})
     return jsonify({"token": token, "usuario": _serialize(usuario)}), 200
-
-
-@auth_bp.get("/me")
-@jwt_required()
-def me():
-    usuario = Usuario.query.get(int(get_jwt_identity()))
-    if not usuario:
-        return jsonify({"message": "Usuario no encontrado."}), 404
-    return jsonify(_serialize(usuario))
 
 
 @auth_bp.patch("/perfil")

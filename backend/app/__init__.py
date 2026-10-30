@@ -8,7 +8,7 @@ def create_app():
     app = Flask(__name__)
     app.config.from_object(Config)
 
-    CORS(app)
+    CORS(app, origins=app.config["CORS_ORIGINS"])
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)

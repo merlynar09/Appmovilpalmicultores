@@ -3,6 +3,7 @@
 // y sincronizar cuando vuelva la conexión (puente SMS/USSD para zonas sin señal).
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import { apiRequest } from '../config/api';
 
 const PENDING_KEY = '@pending_registrations';
@@ -35,7 +36,7 @@ export async function loginUser({ identifier, password, remember }) {
     auth: false,
   });
 
-  await AsyncStorage.setItem('@auth_token', data.token);
+  await SecureStore.setItemAsync('auth_token', data.token);
   await AsyncStorage.setItem('@auth_user', JSON.stringify(data.usuario));
   if (remember) {
     await AsyncStorage.setItem('@auth_remember', 'true');
@@ -50,7 +51,8 @@ export async function actualizarPerfil(payload) {
 }
 
 export async function logoutUser() {
-  await AsyncStorage.multiRemove(['@auth_token', '@auth_user']);
+  await SecureStore.deleteItemAsync('auth_token');
+  await AsyncStorage.removeItem('@auth_user');
 }
 
 export async function getStoredUser() {

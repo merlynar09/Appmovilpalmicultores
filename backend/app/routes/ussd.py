@@ -32,6 +32,7 @@ import os
 from flask import Blueprint, request, jsonify
 
 from app.services import ussd_engine
+from app.utils import simulador_sms_ussd_habilitado, simulador_deshabilitado_response
 
 ussd_bp = Blueprint("ussd", __name__)
 
@@ -40,6 +41,9 @@ ussd_bp = Blueprint("ussd", __name__)
 def ussd_simular():
     """Simulador interno — lo usa la pantalla "Simulador SMS/USSD" de la
     app. NO es una sesión USSD real de un operador móvil."""
+    if not simulador_sms_ussd_habilitado():
+        return simulador_deshabilitado_response()
+
     data = request.get_json(force=True) or {}
     telefono = (data.get("telefono") or "").strip()
     session_id = (data.get("session_id") or "").strip()

@@ -1,16 +1,36 @@
 // config/api.js
-// Cliente HTTP centralizado. Ajusta API_BASE_URL con la IP LOCAL de tu
-// computador en la misma red WiFi que tu celular (no uses 10.0.2.2: eso es
-// solo para el emulador de Android, y este proyecto se prueba con Expo Go en
-// un dispositivo físico). Ver instrucciones para obtener tu IP con
-// `ipconfig` en Windows.
+// Cliente HTTP centralizado.
+//
+// MOD-01/DEV-F2-08: la URL base se lee de la variable de entorno
+// EXPO_PUBLIC_API_URL (Expo la soporta de forma nativa, sin paquete
+// adicional) en vez de quedar fija en el código — así cada quien la ajusta
+// en su propio .env sin tocar este archivo ni arriesgarse a subir una URL
+// de un túnel temporal al repositorio. Ver .env.example en la raíz del
+// proyecto para los 3 escenarios típicos (emulador, dispositivo físico en
+// la misma WiFi, túnel ngrok/ Expo tunnel).
+import Constants from 'expo-constants';
+import * as SecureStore from 'expo-secure-store';
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
+const DEFAULT_EMULADOR = 'http://10.0.2.2:5000/api';
 
-export const API_BASE_URL = 'https://pentagram-rink-shindig.ngrok-free.dev/api';
+export const API_BASE_URL =
+  process.env.EXPO_PUBLIC_API_URL ||
+  Constants.expoConfig?.extra?.apiUrl ||
+  DEFAULT_EMULADOR;
 
+if (!process.env.EXPO_PUBLIC_API_URL && !Constants.expoConfig?.extra?.apiUrl) {
+  console.warn(
+    `[api] EXPO_PUBLIC_API_URL no está definida — usando ${DEFAULT_EMULADOR} ` +
+      '(solo funciona en el emulador de Android). Define EXPO_PUBLIC_API_URL en tu .env ' +
+      'para dispositivo físico o túnel — ver .env.example.'
+  );
+}
+
+// MOD-03: el token JWT es un secreto real — vive en SecureStore (cifrado
+// por el sistema operativo), no en AsyncStorage (texto plano). El usuario
+// cacheado (@auth_user) no es secreto y se queda en AsyncStorage.
 async function getToken() {
-  return AsyncStorage.getItem('@auth_token');
+  return SecureStore.getItemAsync('auth_token');
 }
 
 export async function apiRequest(path, { method = 'GET', body, auth = true } = {}) {

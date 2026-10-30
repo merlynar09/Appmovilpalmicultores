@@ -1,0 +1,39 @@
+services:
+  - type: web
+    name: palma-viva-backend
+    runtime: python
+    plan: free
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt && flask db upgrade
+    startCommand: gunicorn run:app --bind 0.0.0.0:$PORT
+    envVars:
+      - key: FLASK_APP
+        value: run.py
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: JWT_SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: SMS_USSD_SIMULATOR_ENABLED
+        value: "true"
+      - key: SEED_CONFIRM
+        value: "no"
+      - key: TWILIO_ENABLED
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+      - key: TWILIO_PHONE_NUMBER
+        sync: false
+      - key: TWILIO_WEBHOOK_BASE_URL
+        sync: false
+      - key: USSD_PROVIDER_SHARED_SECRET
+        sync: false
+      - key: USSD_PROVIDER_NOMBRE
+        sync: false
