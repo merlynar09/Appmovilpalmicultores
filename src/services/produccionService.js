@@ -24,6 +24,11 @@ export async function crearRegistroProduccion(payload) {
   try {
     return await apiRequest('/produccion', { method: 'POST', body: payload });
   } catch (err) {
+    if (!err.isNetworkError) {
+      // El servidor respondió con un error real (validación, etc.) —
+      // no es algo que se resuelva reintentando sin conexión.
+      throw err;
+    }
     await _encolar(payload);
     throw new Error(
       'Sin conexión: el censo se guardó en este dispositivo y se enviará automáticamente cuando haya señal.'

@@ -17,7 +17,13 @@ export async function registerUser(payload) {
     });
     return data;
   } catch (err) {
-    // Sin conexión: guardamos localmente para reenviar luego
+    if (!err.isNetworkError) {
+      // El servidor respondió (ej. teléfono duplicado): es un error real
+      // que el usuario debe corregir, no algo que resolver reintentando
+      // sin conexión.
+      throw err;
+    }
+    // Sin conexión de verdad: guardamos localmente para reenviar luego
     // (por API o por el puente SMS/USSD simulado con Twilio).
     const pendingRaw = await AsyncStorage.getItem(PENDING_KEY);
     const pending = pendingRaw ? JSON.parse(pendingRaw) : [];

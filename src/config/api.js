@@ -43,11 +43,20 @@ export async function apiRequest(path, { method = 'GET', body, auth = true } = {
     if (token) headers.Authorization = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method,
-    headers,
-    body: body ? JSON.stringify(body) : undefined,
-  });
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+  } catch (_networkErr) {
+    // Esto SÍ es una falla real de red (sin señal, servidor inalcanzable):
+    // fetch() lanza antes de recibir cualquier respuesta del servidor.
+    const err = new Error('No se pudo conectar con el servidor.');
+    err.isNetworkError = true;
+    throw err;
+  }
 
   let data = null;
   try {
@@ -57,6 +66,9 @@ export async function apiRequest(path, { method = 'GET', body, auth = true } = {
   }
 
   if (!response.ok) {
+    // El servidor SÍ respondió (ej. teléfono duplicado, credenciales
+    // inválidas) — no es un problema de conexión, es un error de negocio
+    // que el usuario debe ver tal cual lo manda el backend.
     const message = data?.message || data?.error || `Error ${response.status}`;
     throw new Error(message);
   }
