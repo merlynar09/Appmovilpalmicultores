@@ -50,6 +50,10 @@ def _normalizar_db_url(url):
 
 
 class Config:
+    # Expuesto en app.config para que las rutas (ej. auth.py, dev_codigo)
+    # puedan decidir comportamiento por ambiente sin leer os.environ directo.
+    ENV_ES_DESARROLLO = _ES_DESARROLLO
+
     SECRET_KEY = _requerido("SECRET_KEY")
 
     SQLALCHEMY_DATABASE_URI = _normalizar_db_url(_requerido("DATABASE_URL"))
@@ -60,8 +64,25 @@ class Config:
 
     JSON_SORT_KEYS = False
 
-    # MOD-04: orígenes permitidos por CORS, configurables por ambiente.
-    # Por defecto (desarrollo) se permite todo para no romper Expo Go/tunel/ngrok,
-    # que cambian de origen constantemente durante las pruebas locales.
+    # DEV-F4-05: permite desactivar el rate limiting en pruebas automatizadas
+    # (RATELIMIT_ENABLED=false en backend/tests/conftest.py) — Flask-Limiter
+    # lee este valor una sola vez, dentro de limiter.init_app(), así que debe
+    # estar fijado en el entorno ANTES de llamar create_app(), no después.
+    RATELIMIT_ENABLED = os.environ.get("RATELIMIT_ENABLED", "true").lower() != "false"
+
+    # MOD-04 / DEV-F4-06: orígenes permitidos por CORS, configurables por
+    # ambiente. En desarrollo se permite todo por defecto, para no romper
+    # Expo Go/túnel/ngrok, que cambian de origen constantemente en pruebas
+    # locales. Fuera de desarrollo, CORS_ORIGINS es obligatorio — antes caía
+    # a "*" si no estaba definida, dejando cualquier despliegue sin la
+    # variable abierto a cualquier origen.
     _cors_env = os.environ.get("CORS_ORIGINS")
-    CORS_ORIGINS = [o.strip() for o in _cors_env.split(",") if o.strip()] if _cors_env else "*"
+    if _cors_env:
+        CORS_ORIGINS = [o.strip() for o in _cors_env.split(",") if o.strip()]
+    elif _ES_DESARROLLO:
+        CORS_ORIGINS = "*"
+    else:
+        raise RuntimeError(
+            "La variable de entorno CORS_ORIGINS es obligatoria fuera de FLASK_ENV=development "
+            "(lista de orígenes separados por comas). Defínela en backend/.env antes de arrancar."
+        )

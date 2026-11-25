@@ -1,3 +1,5 @@
+from werkzeug.security import generate_password_hash
+
 from flask import Blueprint, request, jsonify
 
 from app.extensions import db
@@ -13,6 +15,7 @@ from app.models import (
     ContenidoMensaje,
 )
 from app.utils import role_required, current_user_id
+from app.validators import telefono_valido, validar_numero_positivo
 from app.routes.market import crear_precio, _serialize_precio
 from app.services.contenido import obtener_contenido, CLAVES_CONTENIDO
 from app.services.ussd_engine import MENU_PRINCIPAL_TEXTO_DEFECTO, AYUDA_TEXTO_DEFECTO
@@ -38,10 +41,46 @@ def listar_usuarios():
     return jsonify([_serialize_usuario(u) for u in usuarios])
 
 
+@admin_bp.post("/admin/usuarios")
+@role_required("administrador")
+def crear_usuario_admin():
+    """DEV-F4-01: único canal legítimo para crear una cuenta administrador —
+    el registro público (`/auth/register`) ya no acepta ese rol. Requiere
+    estar autenticado como administrador, así que la primera cuenta admin
+    sigue viniendo del seed (`seed.py`), no de este endpoint."""
+    data = request.get_json(force=True) or {}
+    nombre_completo = (data.get("nombre_completo") or "").strip()
+    telefono = (data.get("telefono") or "").strip()
+    password = data.get("password") or ""
+    rol = (data.get("rol") or "administrador").strip().lower()
+
+    if rol != "administrador":
+        return jsonify({"message": "Este endpoint solo crea cuentas administrador."}), 400
+    if not nombre_completo or not telefono or not password:
+        return jsonify({"message": "Nombre, teléfono y contraseña son obligatorios."}), 400
+    if not telefono_valido(telefono):
+        return jsonify({"message": "El teléfono no tiene un formato válido."}), 400
+    if len(password) < 6:
+        return jsonify({"message": "La contraseña debe tener al menos 6 caracteres."}), 400
+    if Usuario.query.filter_by(telefono=telefono).first():
+        return jsonify({"message": "Ya existe una cuenta con ese teléfono."}), 409
+
+    usuario = Usuario(
+        nombre_completo=nombre_completo,
+        telefono=telefono,
+        password_hash=generate_password_hash(password),
+        rol="administrador",
+        estado="activo",
+    )
+    db.session.add(usuario)
+    db.session.commit()
+    return jsonify(_serialize_usuario(usuario)), 201
+
+
 @admin_bp.patch("/admin/usuarios/<int:usuario_id>/estado")
 @role_required("administrador")
 def cambiar_estado_usuario(usuario_id):
-    usuario = Usuario.query.get(usuario_id)
+    usuario = db.session.get(Usuario, usuario_id)
     if not usuario:
         return jsonify({"message": "Usuario no encontrado."}), 404
 
@@ -51,6 +90,10 @@ def cambiar_estado_usuario(usuario_id):
         return jsonify({"message": "Estado inválido."}), 400
 
     usuario.estado = nuevo_estado
+    if nuevo_estado == "suspendido":
+        # DEV-F4-02: invalida de inmediato cualquier JWT ya emitido para este
+        # usuario — antes seguía siendo aceptado hasta su expiración (7 días).
+        usuario.token_version += 1
     db.session.commit()
     return jsonify(_serialize_usuario(usuario))
 
@@ -72,7 +115,7 @@ def listar_transportadores():
 @admin_bp.patch("/admin/transportadores/<int:transportador_id>/validar")
 @role_required("administrador")
 def validar_transportador(transportador_id):
-    t = Transportador.query.get(transportador_id)
+    t = db.session.get(Transportador, transportador_id)
     if not t:
         return jsonify({"message": "Transportador no encontrado."}), 404
 
@@ -153,11 +196,17 @@ def crear_comprador_admin():
     esto cubre solo el caso borde de un usuario sin perfil asociado)."""
     data = request.get_json(force=True) or {}
     usuario_id = data.get("usuario_id")
-    usuario = Usuario.query.get(usuario_id) if usuario_id else None
+    usuario = db.session.get(Usuario, usuario_id) if usuario_id else None
     if not usuario or usuario.rol != "comprador":
         return jsonify({"message": "El usuario indicado no existe o no tiene rol comprador."}), 400
     if Comprador.query.filter_by(usuario_id=usuario.id).first():
         return jsonify({"message": "Ese usuario ya tiene un perfil de comprador."}), 409
+
+    # F5-12: sin ubicación no se puede ubicar al comprador ni calcular
+    # distancias — se exige igual que en el registro público.
+    ubicacion = (data.get("ubicacion") or "").strip()
+    if not ubicacion:
+        return jsonify({"message": "La ubicación es obligatoria."}), 400
 
     empresa = (data.get("empresa") or usuario.nombre_completo).strip()
     comprador = Comprador(
@@ -166,7 +215,7 @@ def crear_comprador_admin():
         descripcion=(data.get("descripcion") or "").strip() or None,
         telefono=(data.get("telefono") or "").strip() or None,
         correo=(data.get("correo") or "").strip() or None,
-        ubicacion=(data.get("ubicacion") or "").strip() or None,
+        ubicacion=ubicacion,
         estado="activo",
     )
     db.session.add(comprador)
@@ -177,11 +226,13 @@ def crear_comprador_admin():
 @admin_bp.put("/admin/compradores/<int:comprador_id>")
 @role_required("administrador")
 def editar_comprador_admin(comprador_id):
-    comprador = Comprador.query.get(comprador_id)
+    comprador = db.session.get(Comprador, comprador_id)
     if not comprador:
         return jsonify({"message": "Comprador no encontrado."}), 404
 
     data = request.get_json(force=True) or {}
+    if "ubicacion" in data and not (data.get("ubicacion") or "").strip():
+        return jsonify({"message": "La ubicación es obligatoria."}), 400
     for campo in ("empresa", "descripcion", "telefono", "correo", "ubicacion"):
         if campo in data:
             setattr(comprador, campo, (data[campo] or "").strip() or None)
@@ -193,7 +244,7 @@ def editar_comprador_admin(comprador_id):
 @admin_bp.patch("/admin/compradores/<int:comprador_id>/estado")
 @role_required("administrador")
 def cambiar_estado_comprador_admin(comprador_id):
-    comprador = Comprador.query.get(comprador_id)
+    comprador = db.session.get(Comprador, comprador_id)
     if not comprador:
         return jsonify({"message": "Comprador no encontrado."}), 404
 
@@ -214,14 +265,16 @@ def publicar_precio_admin(comprador_id):
     precio de cualquier comprador — el palmicultor sigue sin poder fijar
     precios, eso no cambia. Reutiliza exactamente la misma lógica que usa
     el comprador para su propio precio (`market.crear_precio`)."""
-    comprador = Comprador.query.get(comprador_id)
+    comprador = db.session.get(Comprador, comprador_id)
     if not comprador:
         return jsonify({"message": "Comprador no encontrado."}), 404
 
     data = request.get_json(force=True) or {}
-    valor = data.get("valor_moneda")
-    if not valor or float(valor) <= 0:
-        return jsonify({"message": "El valor del precio es obligatorio."}), 400
+    valor, error = validar_numero_positivo(data.get("valor_moneda"), "El valor del precio")
+    if error or valor is None:
+        return jsonify({"message": error or "El valor del precio es obligatorio."}), 400
+    if len(data.get("producto") or "") > 100:
+        return jsonify({"message": "El nombre del producto es demasiado largo (máx. 100 caracteres)."}), 400
 
     precio = crear_precio(comprador, valor, data.get("producto"), data.get("unidad"))
     return jsonify(_serialize_precio(precio)), 201
@@ -297,7 +350,7 @@ def _serialize_usuario(u: Usuario):
 
 
 def _serialize_comprador(c: Comprador):
-    usuario = Usuario.query.get(c.usuario_id)
+    usuario = db.session.get(Usuario, c.usuario_id)
     precio_activo = Precio.query.filter_by(comprador_id=c.id, estado="activo").first()
     return {
         "id": c.id,
@@ -315,7 +368,7 @@ def _serialize_comprador(c: Comprador):
 
 
 def _serialize_transportador(t: Transportador):
-    usuario = Usuario.query.get(t.usuario_id)
+    usuario = db.session.get(Usuario, t.usuario_id)
     return {
         "id": t.id,
         "usuario_id": t.usuario_id,

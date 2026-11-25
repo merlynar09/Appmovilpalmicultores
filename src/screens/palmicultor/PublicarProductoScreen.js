@@ -51,7 +51,7 @@ export default function PublicarProductoScreen({ navigation }) {
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={{ padding: spacing.lg }}>
       <Text style={styles.hint}>
-        Solo se mostrará al comprador la cantidad, el municipio y la descripción — nunca la ubicación exacta de tu finca. El precio no se define aquí: revisa el precio vigente de cada comprador en "Compradores en tu zona" y decide a quién venderle.
+        Solo se mostrará al comprador la cantidad, el municipio y la descripción — nunca la ubicación exacta de tu finca. El precio no se define aquí: revisa el precio vigente de cada comprador en &quot;Compradores en tu zona&quot; y decide a quién venderle.
       </Text>
 
       {lotes.length > 0 && (

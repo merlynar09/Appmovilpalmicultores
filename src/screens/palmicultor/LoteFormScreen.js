@@ -66,7 +66,7 @@ export default function LoteFormScreen({ navigation, route }) {
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.background }} contentContainerStyle={{ padding: spacing.lg }}>
       <Text style={styles.hint}>
-        El código puede ser el que ya uses en campo: por programa de siembra, bloque, sector o plano cartesiano (ej. "A1", "Bloque-3", "Plano-B7").
+        El código puede ser el que ya uses en campo: por programa de siembra, bloque, sector o plano cartesiano (ej. &quot;A1&quot;, &quot;Bloque-3&quot;, &quot;Plano-B7&quot;).
       </Text>
       <Field label="Código del lote" placeholder="Lote-A1" value={codigo} onChangeText={setCodigo} error={errors.codigo} />
       <Field label="Nombre / referencia" placeholder="Sector norte" value={nombre} onChangeText={setNombre} />

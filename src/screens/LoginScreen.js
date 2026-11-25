@@ -13,7 +13,6 @@ import {
   Platform,
   Alert,
   ActivityIndicator,
-  Image,
 } from 'react-native';
 import { colors, spacing, typography, radius, MIN_TOUCH_TARGET } from '../theme/theme';
 import { loginUser } from '../services/authService';

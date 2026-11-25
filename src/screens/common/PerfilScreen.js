@@ -4,7 +4,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing, typography, radius } from '../../theme/theme';
+import { colors, spacing, typography } from '../../theme/theme';
 import { PrimaryButton, Card, Badge, Field } from '../../components/ui';
 import { getStoredUser, logoutUser, actualizarPerfil } from '../../services/authService';
 

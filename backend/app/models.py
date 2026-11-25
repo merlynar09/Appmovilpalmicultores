@@ -12,6 +12,10 @@ class Usuario(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     rol = db.Column(db.String(20), nullable=False)  # palmicultor | transportador | comprador | administrador
     estado = db.Column(db.String(20), default="activo")
+    # DEV-F4-02/DEV-F4-03: se incrementa al suspender la cuenta o al cambiar la
+    # contraseña, para invalidar de inmediato cualquier JWT ya emitido antes
+    # de ese momento (ver Usuario.token_version en app/utils.py::_usuario_vigente).
+    token_version = db.Column(db.Integer, nullable=False, default=0, server_default="0")
     fecha_registro = db.Column(db.DateTime, default=datetime.utcnow)
 
     fincas = db.relationship("Finca", backref="propietario", lazy=True)
@@ -22,9 +26,12 @@ class Usuario(db.Model):
 
 class Finca(db.Model):
     __tablename__ = "fincas"
+    __table_args__ = (
+        db.CheckConstraint("area_hectareas IS NULL OR area_hectareas > 0", name="ck_fincas_area_positiva"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
-    usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=False)
+    usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=False, index=True)
     nombre = db.Column(db.String(150), nullable=False)
     ubicacion = db.Column(db.String(200))
     municipio = db.Column(db.String(100), default="Tumaco")
@@ -40,10 +47,14 @@ class Finca(db.Model):
 
 class Lote(db.Model):
     __tablename__ = "lotes"
+    __table_args__ = (
+        db.UniqueConstraint("finca_id", "codigo", name="uq_lotes_finca_codigo"),
+        db.CheckConstraint("area_hectareas IS NULL OR area_hectareas > 0", name="ck_lotes_area_positiva"),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
-    finca_id = db.Column(db.Integer, db.ForeignKey("fincas.id"), nullable=False)
-    codigo = db.Column(db.String(60), nullable=False)  # nomenclatura flexible (RN02)
+    finca_id = db.Column(db.Integer, db.ForeignKey("fincas.id", ondelete="RESTRICT"), nullable=False, index=True)
+    codigo = db.Column(db.String(60), nullable=False)  # nomenclatura flexible (RN02), único por finca
     nombre = db.Column(db.String(100))
     bloque = db.Column(db.String(50))
     sector = db.Column(db.String(50))
@@ -67,7 +78,7 @@ class CicloCosecha(db.Model):
     __tablename__ = "ciclos_cosecha"
 
     id = db.Column(db.Integer, primary_key=True)
-    lote_id = db.Column(db.Integer, db.ForeignKey("lotes.id"), nullable=False)
+    lote_id = db.Column(db.Integer, db.ForeignKey("lotes.id", ondelete="RESTRICT"), nullable=False, index=True)
     fecha_ultima_cosecha = db.Column(db.Date)
     fecha_inicio = db.Column(db.Date)
     duracion_dias = db.Column(db.Integer)  # 7-12 jóvenes / 9-15 adultas (RN03)
@@ -84,7 +95,7 @@ class RegistroPolinizacion(db.Model):
     __tablename__ = "registros_polinizacion"
 
     id = db.Column(db.Integer, primary_key=True)
-    lote_id = db.Column(db.Integer, db.ForeignKey("lotes.id"), nullable=False)
+    lote_id = db.Column(db.Integer, db.ForeignKey("lotes.id", ondelete="RESTRICT"), nullable=False, index=True)
     fecha = db.Column(db.Date, default=datetime.utcnow)
     numero_inflorescencias = db.Column(db.Integer)
     cantidad_producto = db.Column(db.Float)
@@ -95,9 +106,14 @@ class RegistroPolinizacion(db.Model):
 
 class RegistroProduccion(db.Model):
     __tablename__ = "registros_produccion"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "creado_por_id", "client_local_id", name="uq_registros_produccion_creado_por_local_id"
+        ),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
-    lote_id = db.Column(db.Integer, db.ForeignKey("lotes.id"), nullable=False)
+    lote_id = db.Column(db.Integer, db.ForeignKey("lotes.id", ondelete="RESTRICT"), nullable=False, index=True)
     fecha = db.Column(db.Date, default=datetime.utcnow)
     palmas_evaluadas = db.Column(db.Integer)
     racimos_pequenos = db.Column(db.Integer)
@@ -111,6 +127,12 @@ class RegistroProduccion(db.Model):
     fuente = db.Column(db.String(20), default="app")  # app | sms | ussd
     creado_en = db.Column(db.DateTime, default=datetime.utcnow)
 
+    # F5-01: usuario que lo creó e identificador generado por el cliente
+    # (dispositivo) para la cola offline — permite que reintentar la misma
+    # sincronización no duplique el registro (ver produccion.py::sync_produccion).
+    creado_por_id = db.Column(db.Integer, db.ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=True, index=True)
+    client_local_id = db.Column(db.String(100), nullable=True)
+
     pronosticos = db.relationship("PronosticoProduccion", backref="registro_produccion", lazy=True)
 
 
@@ -118,8 +140,10 @@ class PronosticoProduccion(db.Model):
     __tablename__ = "pronosticos_produccion"
 
     id = db.Column(db.Integer, primary_key=True)
-    lote_id = db.Column(db.Integer, db.ForeignKey("lotes.id"), nullable=False)
-    registro_produccion_id = db.Column(db.Integer, db.ForeignKey("registros_produccion.id"), nullable=True)
+    lote_id = db.Column(db.Integer, db.ForeignKey("lotes.id", ondelete="RESTRICT"), nullable=False, index=True)
+    registro_produccion_id = db.Column(
+        db.Integer, db.ForeignKey("registros_produccion.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     fecha_calculo = db.Column(db.DateTime, default=datetime.utcnow)
     palmas_totales = db.Column(db.Integer)
     palmas_improductivas_muestra = db.Column(db.Integer)
@@ -139,7 +163,7 @@ class Transportador(db.Model):
     __tablename__ = "transportadores"
 
     id = db.Column(db.Integer, primary_key=True)
-    usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=False, unique=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=False, unique=True)
     ubicacion = db.Column(db.String(200))
     disponible = db.Column(db.Boolean, default=True)
     estado = db.Column(db.String(20), default="pendiente")  # pendiente | aprobado | rechazado
@@ -151,9 +175,16 @@ class Transportador(db.Model):
 
 class Vehiculo(db.Model):
     __tablename__ = "vehiculos"
+    __table_args__ = (
+        db.CheckConstraint(
+            "capacidad_toneladas IS NULL OR capacidad_toneladas > 0", name="ck_vehiculos_capacidad_positiva"
+        ),
+    )
 
     id = db.Column(db.Integer, primary_key=True)
-    transportador_id = db.Column(db.Integer, db.ForeignKey("transportadores.id"), nullable=False)
+    transportador_id = db.Column(
+        db.Integer, db.ForeignKey("transportadores.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
     placa = db.Column(db.String(10), unique=True, nullable=False)
     tipo_vehiculo = db.Column(db.String(50))
     capacidad_toneladas = db.Column(db.Float)
@@ -165,7 +196,7 @@ class Comprador(db.Model):
     __tablename__ = "compradores"
 
     id = db.Column(db.Integer, primary_key=True)
-    usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=False, unique=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=False, unique=True)
     empresa = db.Column(db.String(150), nullable=False)
     descripcion = db.Column(db.Text)
     telefono = db.Column(db.String(20))
@@ -182,7 +213,7 @@ class Precio(db.Model):
     __tablename__ = "precios"
 
     id = db.Column(db.Integer, primary_key=True)
-    comprador_id = db.Column(db.Integer, db.ForeignKey("compradores.id"), nullable=False)
+    comprador_id = db.Column(db.Integer, db.ForeignKey("compradores.id", ondelete="RESTRICT"), nullable=False, index=True)
     producto = db.Column(db.String(100), default="Fruto de palma de aceite")
     valor_moneda = db.Column(db.Numeric(12, 2), nullable=False)
     unidad = db.Column(db.String(50), default="Tonelada")
@@ -209,12 +240,16 @@ class SolicitudTransporte(db.Model):
     __tablename__ = "solicitudes_transporte"
 
     id = db.Column(db.Integer, primary_key=True)
-    palmicultor_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=False)
-    transportador_id = db.Column(db.Integer, db.ForeignKey("transportadores.id"))
-    vehiculo_id = db.Column(db.Integer, db.ForeignKey("vehiculos.id"))
-    finca_id = db.Column(db.Integer, db.ForeignKey("fincas.id"), nullable=False)
-    lote_id = db.Column(db.Integer, db.ForeignKey("lotes.id"))
-    comprador_id = db.Column(db.Integer, db.ForeignKey("compradores.id"))
+    palmicultor_id = db.Column(db.Integer, db.ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=False, index=True)
+    transportador_id = db.Column(
+        db.Integer, db.ForeignKey("transportadores.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    vehiculo_id = db.Column(db.Integer, db.ForeignKey("vehiculos.id", ondelete="RESTRICT"), nullable=True, index=True)
+    finca_id = db.Column(db.Integer, db.ForeignKey("fincas.id", ondelete="RESTRICT"), nullable=False, index=True)
+    lote_id = db.Column(db.Integer, db.ForeignKey("lotes.id", ondelete="RESTRICT"), nullable=True, index=True)
+    comprador_id = db.Column(
+        db.Integer, db.ForeignKey("compradores.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     fecha_solicitud = db.Column(db.DateTime, default=datetime.utcnow)
     fecha_servicio = db.Column(db.Date)
     hora_servicio = db.Column(db.Time)
@@ -235,9 +270,11 @@ class Notificacion(db.Model):
     __tablename__ = "notificaciones"
 
     id = db.Column(db.Integer, primary_key=True)
-    usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=False)
-    ciclo_cosecha_id = db.Column(db.Integer, db.ForeignKey("ciclos_cosecha.id"), nullable=True)
-    lote_id = db.Column(db.Integer, db.ForeignKey("lotes.id"), nullable=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=False, index=True)
+    ciclo_cosecha_id = db.Column(
+        db.Integer, db.ForeignKey("ciclos_cosecha.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
+    lote_id = db.Column(db.Integer, db.ForeignKey("lotes.id", ondelete="RESTRICT"), nullable=True, index=True)
     tipo = db.Column(db.String(50))
     titulo = db.Column(db.String(150))
     mensaje = db.Column(db.Text)
@@ -258,7 +295,9 @@ class EstadoVia(db.Model):
     origen = db.Column(db.String(150), nullable=True)
     destino = db.Column(db.String(150), nullable=True)
     distancia_km = db.Column(db.Float, nullable=True)
-    actualizado_por = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=True)
+    actualizado_por = db.Column(
+        db.Integer, db.ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
 
@@ -266,8 +305,11 @@ class PasswordResetToken(db.Model):
     __tablename__ = "password_reset_tokens"
 
     id = db.Column(db.Integer, primary_key=True)
-    usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=False)
-    codigo = db.Column(db.String(6), nullable=False)
+    usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=False, index=True)
+    # DEV-F4-04: antes guardaba el código de 6 dígitos en texto plano
+    # (String(6)); ahora guarda el hash (generate_password_hash), igual que la
+    # contraseña — de ahí el ancho mayor.
+    codigo = db.Column(db.String(255), nullable=False)
     expira_en = db.Column(db.DateTime, nullable=False)
     usado = db.Column(db.Boolean, default=False)
     creado_en = db.Column(db.DateTime, default=datetime.utcnow)
@@ -285,7 +327,9 @@ class SmsUssdLog(db.Model):
     payload = db.Column(db.Text)
     respuesta = db.Column(db.Text)
     estado = db.Column(db.String(20), default="procesado")  # procesado | error
-    usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=True)
+    usuario_id = db.Column(
+        db.Integer, db.ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     creado_en = db.Column(db.DateTime, default=datetime.utcnow)
 
     # --- Twilio (SMS real) ---
@@ -302,8 +346,10 @@ class BalanceIndustrial(db.Model):
     __tablename__ = "balances_industriales"
 
     id = db.Column(db.Integer, primary_key=True)
-    usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=False)
-    pronostico_id = db.Column(db.Integer, db.ForeignKey("pronosticos_produccion.id"), nullable=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=False, index=True)
+    pronostico_id = db.Column(
+        db.Integer, db.ForeignKey("pronosticos_produccion.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     entrada_kg = db.Column(db.Float, nullable=False)
     desglose = db.Column(db.JSON)  # {humedad, tusas, fibras, aguas_impurezas, cuesco, palmiste, aceite_crudo}
     aceite_crudo_kg = db.Column(db.Float)
@@ -317,8 +363,10 @@ class PublicacionMercado(db.Model):
     __tablename__ = "publicaciones_mercado"
 
     id = db.Column(db.Integer, primary_key=True)
-    palmicultor_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=False)
-    lote_id = db.Column(db.Integer, db.ForeignKey("lotes.id"), nullable=True)
+    palmicultor_id = db.Column(
+        db.Integer, db.ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    lote_id = db.Column(db.Integer, db.ForeignKey("lotes.id", ondelete="RESTRICT"), nullable=True, index=True)
     cantidad_toneladas = db.Column(db.Float, nullable=False)
     # El precio lo fija siempre el comprador (ver Precio/Comprador), nunca el
     # palmicultor: su publicación solo anuncia cantidad disponible. El
@@ -329,6 +377,32 @@ class PublicacionMercado(db.Model):
     descripcion = db.Column(db.Text)
     estado = db.Column(db.String(20), default="activa")  # activa | vendida | cancelada
     fecha_publicacion = db.Column(db.DateTime, default=datetime.utcnow)
+
+
+class InteresComprador(db.Model):
+    """F5-06: interés formal de un comprador en una publicación de mercado.
+    Antes no existía ningún registro de esto — el comprador solo podía ver la
+    publicación, sin forma de manifestar interés ni de que el palmicultor lo
+    supiera más allá de la notificación informal fuera de la app."""
+
+    __tablename__ = "intereses_comprador"
+    __table_args__ = (
+        db.UniqueConstraint("publicacion_id", "comprador_id", name="uq_intereses_publicacion_comprador"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    publicacion_id = db.Column(
+        db.Integer, db.ForeignKey("publicaciones_mercado.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    comprador_id = db.Column(
+        db.Integer, db.ForeignKey("compradores.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    estado = db.Column(db.String(20), default="interesado")  # interesado | contactado | descartado
+    mensaje = db.Column(db.Text)
+    fecha = db.Column(db.DateTime, default=datetime.utcnow)
+
+    publicacion = db.relationship("PublicacionMercado", backref="intereses")
+    comprador = db.relationship("Comprador", backref="intereses")
 
 
 class UssdSesion(db.Model):
@@ -347,7 +421,9 @@ class UssdSesion(db.Model):
     session_id = db.Column(db.String(100), unique=True, nullable=False, index=True)
     proveedor = db.Column(db.String(20), default="simulador")  # simulador | <proveedor real>
     telefono = db.Column(db.String(20), nullable=False)
-    usuario_id = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=True)
+    usuario_id = db.Column(
+        db.Integer, db.ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     estado = db.Column(db.String(40), default="MENU_PRINCIPAL")  # paso/menú actual
     contexto = db.Column(db.JSON, default=dict)
     activa = db.Column(db.Boolean, default=True)
@@ -377,5 +453,7 @@ class ContenidoMensaje(db.Model):
     clave = db.Column(db.String(50), unique=True, nullable=False, index=True)
     canal = db.Column(db.String(10), nullable=False)  # sms | ussd
     texto = db.Column(db.Text, nullable=False)
-    actualizado_por = db.Column(db.Integer, db.ForeignKey("usuarios.id"), nullable=True)
+    actualizado_por = db.Column(
+        db.Integer, db.ForeignKey("usuarios.id", ondelete="RESTRICT"), nullable=True, index=True
+    )
     fecha_actualizacion = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

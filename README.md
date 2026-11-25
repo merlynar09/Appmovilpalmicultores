@@ -41,7 +41,7 @@ PostgreSQL. Variables disponibles (todas documentadas con comentarios en
 | `FLASK_ENV` | No (default `development`) | Fuera de `development`, `SECRET_KEY`/`JWT_SECRET_KEY`/`DATABASE_URL` son obligatorias — el backend no arranca con un secreto por defecto conocido. |
 | `SECRET_KEY`, `JWT_SECRET_KEY` | Sí fuera de dev | Claves de Flask y de firma de JWT. |
 | `DATABASE_URL` | Sí fuera de dev | Conexión a PostgreSQL (se normaliza internamente a `postgresql+psycopg2://`). |
-| `CORS_ORIGINS` | No | Orígenes permitidos, separados por coma. Vacío = todo permitido (cómodo en desarrollo). |
+| `CORS_ORIGINS` | Sí fuera de dev | Orígenes permitidos, separados por coma. En desarrollo, vacío = todo permitido; fuera de desarrollo es obligatoria (DEV-F4-06) — el backend no arranca sin ella. |
 | `SMS_USSD_SIMULATOR_ENABLED` | No (default `true`) | Apaga `/api/sms/entrante` y `/api/ussd/simular` (los simuladores públicos) si los pones en `false`. |
 | `SEED_CONFIRM` | Solo para correr `seed.py` | Debe ser `yes` — evita que el seed (contraseñas conocidas) corra por accidente en una base que no sea desechable. |
 | `TWILIO_*` | Solo para SMS real | Ver la sección [SMS y USSD](#sms-y-ussd). |
@@ -113,38 +113,83 @@ app, no la cámara del sistema). Si el celular está en otra red distinta a tu c
 Esta es la forma en que se probó y evaluó todo este proyecto durante su desarrollo — no
 requiere Android Studio, SDK, Gradle ni compilar nada nativo.
 
-### 3.2 Compilar nativamente (opcional, solo si necesitas un APK real)
+### 3.2 Producir un APK real
+
+**Vía recomendada y verificada: EAS Build (compilación en la nube de Expo).** No depende del
+toolchain nativo local (Android Studio/SDK/Gradle/JDK) ni de la RAM de la máquina de desarrollo:
+
+```bash
+npx eas-cli build --platform android --profile preview
+```
+
+Requiere una cuenta Expo (`npx eas-cli login`) y, la primera vez, `npx eas-cli init`. El perfil
+`preview` (`eas.json`) genera un `.apk` instalable directamente (no un `.aab`). La URL del
+backend para ese build se inyecta por variable de entorno EAS
+(`npx eas-cli env:set --environment preview --name EXPO_PUBLIC_API_URL --value https://tu-backend...`),
+no por un `.env` local — el archivo `.env` está en `.gitignore` y no viaja en el paquete que se
+sube a EAS.
+
+**Build nativo local (`npx expo run:android`): no reproducible en esta máquina de desarrollo —
+limitación de hardware, no de código.** Se intentó corrigiendo el JDK del PATH y regenerando
+`android/` con `npx expo prebuild --clean`, pero el proceso de Gradle/CMake para
+`react-native-gesture-handler` requiere más memoria que la disponible (la máquina de desarrollo
+tiene 6 GB de RAM; Gradle + un JDK moderno + CMake necesitan considerablemente más). Si tu
+máquina tiene recursos suficientes, el camino es:
 
 ```bash
 npx expo prebuild --platform android --clean
 npx expo run:android
 ```
 
-Requiere Android Studio + SDK instalados, un emulador (AVD) o dispositivo conectado, y un
-**JDK 17 o superior** (Gradle moderno no funciona con JDK 8 — en Windows, si tienes Android
-Studio instalado, usa su JBR: típicamente
-`C:\Program Files\Android\Android Studio\jbr`, asegurándote de que sea el `java` que resuelve
-tu PATH al compilar, no uno más viejo que puedas tener instalado aparte).
+Con Android Studio + SDK, un emulador (AVD) o dispositivo conectado, y un **JDK 17 o superior**
+(en Windows, usa el JBR de Android Studio: típicamente
+`C:\Program Files\Android\Android Studio\jbr`, asegurándote de que sea el `java` que resuelve tu
+PATH al compilar).
 
-`npx expo prebuild` regenera la carpeta `android/` desde `app.json`/`package.json` — es el
-camino soportado oficialmente por Expo en vez de mantener esa carpeta a mano.
+**Nota (Windows):** si tu ruta del proyecto tiene caracteres no-ASCII (tildes, ñ, etc.), Gradle
+puede fallar al interpretar esa ruta (`DEV-F2-12`) — usa una ruta solo con caracteres ASCII. Esto
+es una limitación conocida de Gradle en Windows, no algo que este proyecto pueda corregir desde
+su propio código.
 
-**Nota (Windows):** si tu ruta del proyecto tiene caracteres no-ASCII (tildes, ñ, etc.),
-Gradle puede fallar al interpretar esa ruta. Usa una ruta solo con caracteres ASCII si te
-pasa esto.
+**`npx expo-doctor` (DEV-F2-01):** 19/20 checks — el único pendiente es un aviso informativo (no
+un error) porque el proyecto tiene `android/` versionado junto a configuración nativa en
+`app.json`; no se toca porque EAS Build ya usa ese flujo para producir el APK real. **Nota
+(Windows + OneDrive):** si corres `npx expo export` o `npx expo start` desde una carpeta
+sincronizada por OneDrive y Metro falla con
+`EINVAL: invalid argument, readlink '...@expo/ws-tunnel/package.json'`, es un problema conocido
+de Windows/OneDrive con el crawler de archivos de Metro sobre un archivo normal (no un symlink) —
+no es un error del código del proyecto. Se resuelve típicamente reinstalando
+(`rm -rf node_modules && npm ci`) o pausando la sincronización de OneDrive durante el desarrollo.
 
 ## 4. Pruebas automatizadas
 
 ```bash
 cd backend
-pytest
+pytest --cov=app --cov-report=term-missing
 ```
 
-Cubre autenticación (registro/login/JWT), autorización por rol, los CRUD principales
-(fincas, puntos de comercialización, compradores) y el módulo SMS/USSD completo (webhook de
-Twilio, firma, deduplicación, motor de sesión USSD). El frontend todavía no tiene lint ni
-pruebas automatizadas configuradas — es una mejora pendiente, no bloqueante para evaluar el
-prototipo.
+Cada prueba corre contra una base Postgres local **dedicada y desechable** (`palma_viva_test`,
+nunca `palma_viva` ni Supabase), que se reconstruye desde cero antes de cada prueba — por eso
+cualquiera se puede ejecutar sola o en cualquier orden. Cubre autenticación (registro/login/JWT,
+revocación de sesión al suspender o cambiar contraseña, rate limiting, recuperación de
+contraseña), autorización por rol y propiedad horizontal, los CRUD principales (fincas, lotes,
+compradores, puntos de comercialización), transporte (autorización de aceptar/rechazar),
+producción (idempotencia de sincronización offline), mercado (interés de compra, distancia) y el
+módulo SMS/USSD completo (webhook de Twilio, firma, deduplicación, motor de sesión USSD).
+
+El pipeline de CI (`.github/workflows/tests.yml`) corre esta misma suite, con un Postgres de
+servicio, en cada push/PR a `main`, junto con el lint y las pruebas del frontend.
+
+Frontend:
+
+```bash
+npm run lint
+npm test
+```
+
+Cubre el lint del proyecto completo y la lógica de la cola offline (`authService.js`,
+`produccionService.js`): un error de red real se encola para reintentar, un error del servidor
+(ej. dato inválido, duplicado) se muestra tal cual y no se encola.
 
 ## 5. SMS y USSD
 
@@ -161,14 +206,69 @@ El acceso sin datos móviles tiene dos canales, documentados por separado:
 
 ## 6. Vulnerabilidades conocidas (npm audit)
 
-Tras `npm audit fix` (sin `--force`) quedan sin resolver 2 cadenas, ambas en herramientas de
-build de Node (no en código que corre dentro de la app):
+Tras `npm audit fix` (sin `--force`) y `npx expo install --fix` quedan **24 vulnerabilidades
+moderadas, 0 altas/críticas** (DEV-F2-05 — verificado corriendo `npm audit` de nuevo después de
+alinear todas las versiones con lo que pide el SDK 58, no es un conteo desactualizado):
 
-- `deepmerge`/`zod` (vía `@expo/cli`/`@expo/config`, parte de la propia CLI de Expo): el único
-  arreglo disponible instala `expo@51.0.39`, una regresión mayor desde el SDK 58 actual —
-  riesgo aceptado conscientemente en vez de degradar el proyecto.
+- `expo`, `@expo/fingerprint`, `glob`, `minimatch`: el único arreglo que ofrece `npm audit fix`
+  instala `expo@52.0.49`, una regresión mayor desde el SDK 58 actual.
+- La mayoría (`jest`, `@jest/core`, `@jest/reporters`, `@jest/transform`, `babel-plugin-istanbul`,
+  `test-exclude`, etc.): el arreglo que ofrece `npm audit fix` instala `jest@29.7.0`, que
+  desalinearía de nuevo el proyecto de lo que `jest-expo@~58.0.0` (el preset de pruebas del SDK
+  58) espera — el mismo tipo de disyuntiva que con Expo, así que se mantiene la versión alineada
+  con el SDK en vez de perseguir el número de `npm audit`.
 - `uuid` (vía `@expo/ngrok`, usado solo para `expo start --tunnel`): sin fix disponible todavía
   en origen.
+
+Ninguna corre dentro de la app instalada en un teléfono — son herramientas de build/CLI/pruebas
+de Node que solo se usan en la máquina de desarrollo. Forzar cualquiera de estos arreglos
+(`--force`) degradaría Expo o el runner de pruebas a versiones incompatibles con el resto del
+proyecto — riesgo aceptado conscientemente en vez de esa regresión.
+
+## 7. Seguridad (segunda auditoría — Fase 4)
+
+- **El registro público solo puede crear cuentas palmicultor, comprador o transportador.**
+  Una cuenta administrador se crea exclusivamente desde `seed.py` (la primera) o desde
+  `POST /api/admin/usuarios`, que exige estar ya autenticado como administrador.
+- **Las sesiones se revocan de inmediato**, no solo al expirar el JWT (7 días): suspender una
+  cuenta, cambiar su contraseña, o cerrar sesión (`POST /api/auth/logout`, ya invocado por el
+  frontend al cerrar sesión) invalida en el siguiente request cualquier token emitido antes de
+  ese momento (columna `token_version`). Antes, "cerrar sesión" solo borraba el token en el
+  dispositivo — el mismo token seguía siendo válido contra el backend hasta expirar.
+- **Recuperación de contraseña:** el código de 6 dígitos se guarda con hash (nunca en claro), y
+  nunca viaja en la respuesta HTTP fuera de `FLASK_ENV=development`. Pedir un código nuevo
+  invalida los anteriores sin usar.
+- **Rate limiting** (`Flask-Limiter`, en memoria) en registro, login, y los tres pasos de
+  recuperación de contraseña.
+- **`CORS_ORIGINS` es obligatorio fuera de desarrollo** — ver tabla de variables en la sección 2.
+- Validación de formato de teléfono/correo en registro y edición de perfil, y manejadores de
+  error globales que siempre devuelven JSON (nunca la página HTML de error por defecto de Flask),
+  con `rollback()` automático ante cualquier excepción no controlada.
+
+## 8. Integridad de datos (segunda auditoría — Fase 5)
+
+- Área (fincas, lotes) y capacidad (vehículos) deben ser mayores que cero, validado en la API y
+  reforzado con `CHECK` en la base de datos.
+- El código de un lote es único **por finca** (antes no había ninguna restricción).
+- Una finca o lote inactivos ya no admiten operaciones nuevas (crear lotes, ciclos, censos de
+  producción, solicitudes de transporte) — sí se pueden seguir consultando.
+- La sincronización de censos de producción offline (`POST /api/produccion/sync`) es idempotente:
+  reenviar el mismo `_local_id` (ej. por falta de confirmación de red) ya no duplica el registro.
+- Solo el transportador aprobado y, si ya está asignada, el mismo transportador de la solicitud,
+  puede aceptarla/rechazarla/cambiar su estado — antes `rechazar` no validaba nada de esto.
+- Nuevo flujo de interés de compra: un comprador puede manifestar interés en una publicación del
+  palmicultor (`POST /mercado/publicaciones/<id>/interes`), que notifica al palmicultor; este
+  puede listar quién mostró interés (`GET .../intereses`).
+- `GET /compradores/cercanos` calcula la distancia real (Haversine) cuando el cliente envía su
+  posición (`?lat=&lon=`) y el comprador tiene coordenadas; si falta cualquiera de los dos datos,
+  devuelve `distanciaKm: null` en vez de un `0` que antes era siempre un placeholder.
+- Un comprador siempre debe tener `ubicacion` (registro público y alta administrativa).
+- **Política de "eliminar" un comprador: se desactiva (`estado=inactivo`), igual que fincas,
+  lotes y vehículos — nunca se borra físicamente**, para no perder el histórico de precios y
+  solicitudes de transporte asociado. Es una decisión de diseño consistente con el resto del
+  proyecto, no una limitación pendiente.
+- Las 29 llaves foráneas del esquema declaran explícitamente `ON DELETE RESTRICT` (antes dependían
+  del `NO ACTION` implícito de Postgres) y las 27 que no tenían índice propio ahora lo tienen.
 
 ## Estructura
 

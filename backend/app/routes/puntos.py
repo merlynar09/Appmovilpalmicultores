@@ -40,7 +40,7 @@ def crear_punto():
 @puntos_bp.put("/admin/puntos-comercializacion/<int:punto_id>")
 @role_required("administrador")
 def editar_punto(punto_id):
-    punto = PuntoComercializacion.query.get(punto_id)
+    punto = db.session.get(PuntoComercializacion, punto_id)
     if not punto:
         return jsonify({"message": "Punto de comercialización no encontrado."}), 404
 
@@ -64,7 +64,7 @@ def editar_punto(punto_id):
 @puntos_bp.patch("/admin/puntos-comercializacion/<int:punto_id>/estado")
 @role_required("administrador")
 def cambiar_estado_punto(punto_id):
-    punto = PuntoComercializacion.query.get(punto_id)
+    punto = db.session.get(PuntoComercializacion, punto_id)
     if not punto:
         return jsonify({"message": "Punto de comercialización no encontrado."}), 404
 

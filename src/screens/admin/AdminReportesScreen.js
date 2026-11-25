@@ -3,7 +3,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
-import { colors, spacing, typography, radius } from '../../theme/theme';
+import { colors, spacing, typography } from '../../theme/theme';
 import { Card, LoadingView } from '../../components/ui';
 import { reportesGenerales } from '../../services/adminService';
 

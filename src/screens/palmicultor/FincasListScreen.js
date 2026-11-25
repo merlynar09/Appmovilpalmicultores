@@ -3,7 +3,7 @@ import React, { useCallback, useState } from 'react';
 import { View, Text, StyleSheet, FlatList, RefreshControl, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { colors, spacing, typography, radius } from '../../theme/theme';
+import { colors, spacing, typography } from '../../theme/theme';
 import { Card, PrimaryButton, EmptyState, LoadingView } from '../../components/ui';
 import { listarFincas } from '../../services/fincasService';
 

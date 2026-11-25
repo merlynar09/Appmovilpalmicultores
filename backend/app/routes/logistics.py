@@ -16,6 +16,7 @@ from app.models import (
     Usuario,
 )
 from app.utils import role_required, current_user_id
+from app.validators import validar_numero_positivo
 from app.routes.sms import notificar_por_sms
 
 logistics_bp = Blueprint("logistics", __name__)
@@ -93,11 +94,16 @@ def crear_vehiculo():
     if Vehiculo.query.filter_by(placa=placa).first():
         return jsonify({"message": "Ya existe un vehículo con esa placa."}), 409
 
+    # F5-04: antes se podía guardar una capacidad negativa o cero sin aviso.
+    capacidad, error = validar_numero_positivo(data.get("capacidad_toneladas"), "La capacidad en toneladas")
+    if error:
+        return jsonify({"message": error}), 400
+
     vehiculo = Vehiculo(
         transportador_id=t.id,
         placa=placa,
         tipo_vehiculo=data.get("tipo_vehiculo"),
-        capacidad_toneladas=data.get("capacidad_toneladas"),
+        capacidad_toneladas=capacidad,
         disponible=data.get("disponible", True),
     )
     db.session.add(vehiculo)
@@ -113,6 +119,11 @@ def editar_vehiculo(vehiculo_id):
     if not vehiculo:
         return jsonify({"message": "Vehículo no encontrado."}), 404
     data = request.get_json(force=True) or {}
+    if "capacidad_toneladas" in data:
+        capacidad, error = validar_numero_positivo(data["capacidad_toneladas"], "La capacidad en toneladas")
+        if error:
+            return jsonify({"message": error}), 400
+        data["capacidad_toneladas"] = capacidad
     for campo in ("tipo_vehiculo", "capacidad_toneladas", "disponible", "estado"):
         if campo in data:
             setattr(vehiculo, campo, data[campo])
@@ -142,10 +153,16 @@ def crear_solicitud():
     finca = Finca.query.filter_by(id=data.get("finca_id"), usuario_id=current_user_id()).first()
     if not finca:
         return jsonify({"message": "La finca indicada no existe o no te pertenece."}), 400
+    if finca.estado != "activa":
+        return jsonify({"message": "La finca está inactiva; no se pueden crear nuevas solicitudes."}), 409
 
     lote_id = data.get("lote_id")
-    if lote_id and not Lote.query.filter_by(id=lote_id, finca_id=finca.id).first():
-        return jsonify({"message": "El lote indicado no pertenece a la finca seleccionada."}), 400
+    if lote_id:
+        lote = Lote.query.filter_by(id=lote_id, finca_id=finca.id).first()
+        if not lote:
+            return jsonify({"message": "El lote indicado no pertenece a la finca seleccionada."}), 400
+        if lote.estado != "activo":
+            return jsonify({"message": "El lote está inactivo; no se pueden crear nuevas solicitudes."}), 409
 
     fecha_servicio = _parse_date(data.get("fecha_servicio"))
     hora_servicio = _parse_time(data.get("hora_servicio"))
@@ -214,7 +231,7 @@ def aceptar_solicitud(solicitud_id):
     if not t or t.estado != "aprobado":
         return jsonify({"message": "Tu perfil de transportador está pendiente de validación."}), 403
 
-    solicitud = SolicitudTransporte.query.get(solicitud_id)
+    solicitud = db.session.get(SolicitudTransporte, solicitud_id)
     if not solicitud or solicitud.estado != "Pendiente" or solicitud.transportador_id is not None:
         return jsonify({"message": "La solicitud ya no está disponible."}), 409
 
@@ -241,7 +258,7 @@ def aceptar_solicitud(solicitud_id):
             enlace="HistorialDespachos",
         )
     )
-    notificar_por_sms(Usuario.query.get(solicitud.palmicultor_id), titulo, mensaje)
+    notificar_por_sms(db.session.get(Usuario, solicitud.palmicultor_id), titulo, mensaje)
     db.session.commit()
     return jsonify(_serialize_solicitud(solicitud, detalle=True))
 
@@ -249,10 +266,19 @@ def aceptar_solicitud(solicitud_id):
 @logistics_bp.patch("/transporte/solicitudes/<int:solicitud_id>/rechazar")
 @role_required("transportador")
 def rechazar_solicitud(solicitud_id):
+    # F5-02 (crítica): antes no validaba nada aquí — ni que el transportador
+    # estuviera aprobado, ni que la solicitud le perteneciera. Cualquier
+    # transportador autenticado podía rechazar la solicitud de cualquier
+    # otro. Ahora exige la misma guardia que ya tenía `aceptar_solicitud`.
     t = _get_own_transportador()
-    solicitud = SolicitudTransporte.query.get(solicitud_id)
+    if not t or t.estado != "aprobado":
+        return jsonify({"message": "Tu perfil de transportador está pendiente de validación."}), 403
+
+    solicitud = db.session.get(SolicitudTransporte, solicitud_id)
     if not solicitud or solicitud.estado != "Pendiente":
         return jsonify({"message": "La solicitud ya no está disponible."}), 409
+    if solicitud.transportador_id is not None and solicitud.transportador_id != t.id:
+        return jsonify({"message": "Esta solicitud no te pertenece."}), 403
 
     data = request.get_json(silent=True) or {}
     solicitud.estado = "Rechazada"
@@ -265,7 +291,12 @@ def rechazar_solicitud(solicitud_id):
 @role_required("transportador")
 def actualizar_estado_solicitud(solicitud_id):
     t = _get_own_transportador()
-    solicitud = SolicitudTransporte.query.filter_by(id=solicitud_id, transportador_id=t.id if t else -1).first()
+    # F5-02: faltaba exigir que el transportador siguiera aprobado — uno
+    # desaprobado después de habérsele asignado la solicitud podía seguir
+    # cambiando su estado.
+    if not t or t.estado != "aprobado":
+        return jsonify({"message": "Tu perfil de transportador está pendiente de validación."}), 403
+    solicitud = SolicitudTransporte.query.filter_by(id=solicitud_id, transportador_id=t.id).first()
     if not solicitud:
         return jsonify({"message": "Solicitud no encontrada."}), 404
 
@@ -286,7 +317,7 @@ def actualizar_estado_solicitud(solicitud_id):
             enlace="HistorialDespachos",
         )
     )
-    notificar_por_sms(Usuario.query.get(solicitud.palmicultor_id), titulo, mensaje)
+    notificar_por_sms(db.session.get(Usuario, solicitud.palmicultor_id), titulo, mensaje)
     db.session.commit()
     return jsonify(_serialize_solicitud(solicitud))
 
@@ -350,7 +381,7 @@ def reportar_via():
 @logistics_bp.put("/vias/<int:via_id>")
 @role_required("transportador", "administrador")
 def actualizar_via(via_id):
-    via = EstadoVia.query.get(via_id)
+    via = db.session.get(EstadoVia, via_id)
     if not via:
         return jsonify({"message": "Vía no encontrada."}), 404
     data = request.get_json(force=True) or {}
@@ -384,7 +415,7 @@ def _get_own_transportador():
 
 
 def _get_visible_solicitud(solicitud_id):
-    solicitud = SolicitudTransporte.query.get(solicitud_id)
+    solicitud = db.session.get(SolicitudTransporte, solicitud_id)
     if not solicitud:
         return None
     rol = get_jwt().get("rol")
@@ -483,7 +514,7 @@ def _serialize_solicitud(s: SolicitudTransporte, detalle=False):
     }
 
     if revelar_ubicacion:
-        finca = Finca.query.get(s.finca_id)
+        finca = db.session.get(Finca, s.finca_id)
         data["ubicacion_exacta"] = {
             "direccion": finca.ubicacion if finca else None,
             "lat": finca.coordenadas_lat if finca else None,
@@ -494,7 +525,7 @@ def _serialize_solicitud(s: SolicitudTransporte, detalle=False):
     # solo protege el origen), así que sus coordenadas siempre se incluyen
     # cuando existen — sirven para el mapa de ruta.
     if s.comprador_id:
-        comprador = Comprador.query.get(s.comprador_id)
+        comprador = db.session.get(Comprador, s.comprador_id)
         if comprador and comprador.latitud is not None and comprador.longitud is not None:
             data["destino_coords"] = {
                 "lat": comprador.latitud,

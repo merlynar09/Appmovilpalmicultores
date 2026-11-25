@@ -5,6 +5,7 @@ from flask import Blueprint, request, jsonify
 from app.extensions import db
 from app.models import Finca, Lote, CicloCosecha
 from app.utils import role_required, current_user_id
+from app.validators import validar_numero_positivo
 
 fincas_bp = Blueprint("fincas", __name__)
 
@@ -26,6 +27,11 @@ def crear_finca():
     if not nombre:
         return jsonify({"message": "El nombre de la finca es obligatorio."}), 400
 
+    # F5-04: antes se podía guardar un área negativa o cero sin aviso.
+    area, error = validar_numero_positivo(data.get("area_hectareas"), "El área en hectáreas")
+    if error:
+        return jsonify({"message": error}), 400
+
     finca = Finca(
         usuario_id=current_user_id(),
         nombre=nombre,
@@ -34,7 +40,7 @@ def crear_finca():
         vereda=(data.get("vereda") or "").strip() or None,
         coordenadas_lat=data.get("coordenadas_lat"),
         coordenadas_long=data.get("coordenadas_long"),
-        area_hectareas=data.get("area_hectareas"),
+        area_hectareas=area,
     )
     db.session.add(finca)
     db.session.commit()
@@ -58,6 +64,11 @@ def editar_finca(finca_id):
         return jsonify({"message": "Finca no encontrada."}), 404
 
     data = request.get_json(force=True) or {}
+    if "area_hectareas" in data:
+        area, error = validar_numero_positivo(data["area_hectareas"], "El área en hectáreas")
+        if error:
+            return jsonify({"message": error}), 400
+        data["area_hectareas"] = area
     for campo in ("nombre", "ubicacion", "municipio", "vereda", "area_hectareas", "coordenadas_lat", "coordenadas_long"):
         if campo in data:
             setattr(finca, campo, data[campo])
@@ -95,6 +106,9 @@ def crear_lote(finca_id):
     finca = _get_own_finca(finca_id)
     if not finca:
         return jsonify({"message": "Finca no encontrada."}), 404
+    # F5-03: una finca desactivada no debe admitir lotes nuevos.
+    if finca.estado != "activa":
+        return jsonify({"message": "La finca está inactiva; no se pueden crear nuevos lotes."}), 409
 
     data = request.get_json(force=True) or {}
     # RN02: nomenclatura flexible — se admite cualquier código no vacío
@@ -102,6 +116,13 @@ def crear_lote(finca_id):
     codigo = (data.get("codigo") or "").strip()
     if not codigo:
         return jsonify({"message": "El código del lote es obligatorio."}), 400
+    # F5-05: el código debe ser único dentro de la misma finca.
+    if Lote.query.filter_by(finca_id=finca.id, codigo=codigo).first():
+        return jsonify({"message": "Ya existe un lote con ese código en esta finca."}), 409
+
+    area, error = validar_numero_positivo(data.get("area_hectareas"), "El área en hectáreas")
+    if error:
+        return jsonify({"message": error}), 400
 
     lote = Lote(
         finca_id=finca.id,
@@ -109,7 +130,7 @@ def crear_lote(finca_id):
         nombre=(data.get("nombre") or "").strip() or None,
         bloque=(data.get("bloque") or "").strip() or None,
         sector=(data.get("sector") or "").strip() or None,
-        area_hectareas=data.get("area_hectareas"),
+        area_hectareas=area,
         anio_siembra=data.get("anio_siembra"),
         numero_palmas=data.get("numero_palmas"),
         material_sembrado=(data.get("material_sembrado") or "").strip() or None,
@@ -140,6 +161,24 @@ def editar_lote(lote_id):
         return jsonify({"message": "Lote no encontrado."}), 404
 
     data = request.get_json(force=True) or {}
+
+    if "codigo" in data:
+        nuevo_codigo = (data.get("codigo") or "").strip()
+        if not nuevo_codigo:
+            return jsonify({"message": "El código del lote no puede quedar vacío."}), 400
+        existente = Lote.query.filter(
+            Lote.finca_id == lote.finca_id, Lote.codigo == nuevo_codigo, Lote.id != lote.id
+        ).first()
+        if existente:
+            return jsonify({"message": "Ya existe un lote con ese código en esta finca."}), 409
+        data["codigo"] = nuevo_codigo
+
+    if "area_hectareas" in data:
+        area, error = validar_numero_positivo(data["area_hectareas"], "El área en hectáreas")
+        if error:
+            return jsonify({"message": error}), 400
+        data["area_hectareas"] = area
+
     campos = (
         "codigo", "nombre", "bloque", "sector", "area_hectareas", "anio_siembra",
         "numero_palmas", "material_sembrado", "topografia", "drenaje",
@@ -182,6 +221,9 @@ def crear_ciclo(lote_id):
     lote = _get_own_lote(lote_id)
     if not lote:
         return jsonify({"message": "Lote no encontrado."}), 404
+    # F5-03: un lote (o su finca) inactivo no debe admitir ciclos nuevos.
+    if lote.estado != "activo" or lote.finca.estado != "activa":
+        return jsonify({"message": "El lote o la finca están inactivos; no se pueden crear nuevos ciclos."}), 409
 
     data = request.get_json(force=True) or {}
     duracion_dias = data.get("duracion_dias")
@@ -213,7 +255,7 @@ def crear_ciclo(lote_id):
 @fincas_bp.put("/ciclos/<int:ciclo_id>")
 @role_required("palmicultor")
 def editar_ciclo(ciclo_id):
-    ciclo = CicloCosecha.query.get(ciclo_id)
+    ciclo = db.session.get(CicloCosecha, ciclo_id)
     if not ciclo or not _get_own_lote(ciclo.lote_id):
         return jsonify({"message": "Ciclo no encontrado."}), 404
 
@@ -244,9 +286,13 @@ def editar_ciclo(ciclo_id):
 @role_required("palmicultor")
 def registrar_cosecha(ciclo_id):
     """Marca el ciclo actual como completado y programa el siguiente automáticamente."""
-    ciclo = CicloCosecha.query.get(ciclo_id)
-    if not ciclo or not _get_own_lote(ciclo.lote_id):
+    ciclo = db.session.get(CicloCosecha, ciclo_id)
+    lote = _get_own_lote(ciclo.lote_id) if ciclo else None
+    if not ciclo or not lote:
         return jsonify({"message": "Ciclo no encontrado."}), 404
+    # F5-03: un lote (o su finca) inactivo no debe admitir nuevas cosechas.
+    if lote.estado != "activo" or lote.finca.estado != "activa":
+        return jsonify({"message": "El lote o la finca están inactivos."}), 409
 
     hoy = date.today()
     ciclo.estado = "Completado"
@@ -273,7 +319,7 @@ def _get_own_finca(finca_id):
 
 
 def _get_own_lote(lote_id):
-    lote = Lote.query.get(lote_id)
+    lote = db.session.get(Lote, lote_id)
     if not lote:
         return None
     if not _get_own_finca(lote.finca_id):

@@ -56,7 +56,7 @@ def test_puntos_comercializacion_crud_completo(client, app_ctx):
         publico_tras_desactivar = client.get("/api/puntos-comercializacion")
         assert not any(p["id"] == punto_id for p in publico_tras_desactivar.get_json())
     finally:
-        punto = PuntoComercializacion.query.get(punto_id)
+        punto = db.session.get(PuntoComercializacion, punto_id)
         if punto:
             db.session.delete(punto)
             db.session.commit()

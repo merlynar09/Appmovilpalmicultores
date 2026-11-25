@@ -45,7 +45,7 @@ def calcular_pronostico():
     """Implementa exactamente la lógica RN04 (pronóstico oficial a 6 meses)."""
     data = request.get_json(force=True) or {}
 
-    lote = Lote.query.get(data.get("lote_id"))
+    lote = db.session.get(Lote, data.get("lote_id"))
     if not lote or not Finca.query.filter_by(id=lote.finca_id, usuario_id=current_user_id()).first():
         return jsonify({"message": "El lote indicado no existe o no te pertenece."}), 400
 
@@ -124,10 +124,10 @@ def calcular_pronostico():
 
 
 def _get_own_pronostico(pronostico_id):
-    pronostico = PronosticoProduccion.query.get(pronostico_id)
+    pronostico = db.session.get(PronosticoProduccion, pronostico_id)
     if not pronostico:
         return None
-    lote = Lote.query.get(pronostico.lote_id)
+    lote = db.session.get(Lote, pronostico.lote_id)
     if not lote or not Finca.query.filter_by(id=lote.finca_id, usuario_id=current_user_id()).first():
         return None
     return pronostico

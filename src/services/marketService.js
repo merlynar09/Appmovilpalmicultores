@@ -43,7 +43,11 @@ export async function vitrinaPublica(filtros = {}) {
   const params = new URLSearchParams();
   if (filtros.municipio) params.set('municipio', filtros.municipio);
   const qs = params.toString();
-  return apiRequest(`/mercado/vitrina${qs ? `?${qs}` : ''}`);
+  // El backend ahora responde { items, limit, offset, total } (paginación
+  // real) en vez de una lista plana — se desenvuelve aquí para que las
+  // pantallas que ya consumen vitrinaPublica() sigan recibiendo el array.
+  const data = await apiRequest(`/mercado/vitrina${qs ? `?${qs}` : ''}`);
+  return Array.isArray(data) ? data : data.items || [];
 }
 
 export const detallePublicacion = (id) => apiRequest(`/mercado/publicaciones/${id}/detalle`);
@@ -52,3 +56,9 @@ export const detalleComprador = (id) => apiRequest(`/compradores/${id}`);
 // Precios: los fija siempre el comprador, nunca el palmicultor.
 export const misPrecios = () => apiRequest('/precios/mios');
 export const publicarPrecio = (payload) => apiRequest('/precios/mios', { method: 'POST', body: payload });
+
+// F5-06: manifestar y consultar interés de compra en una publicación.
+export const manifestarInteres = (publicacionId, payload = {}) =>
+  apiRequest(`/mercado/publicaciones/${publicacionId}/interes`, { method: 'POST', body: payload });
+export const listarInteresesPublicacion = (publicacionId) =>
+  apiRequest(`/mercado/publicaciones/${publicacionId}/intereses`);

@@ -70,7 +70,7 @@ def _generar_alertas_cosecha(usuario_id):
             continue
 
         if 0 <= dias_restantes <= anticipacion or dias_restantes < 0:
-            lote = Lote.query.get(ciclo.lote_id)
+            lote = db.session.get(Lote, ciclo.lote_id)
             if dias_restantes < 0:
                 titulo = f"Cosecha retrasada — {lote.codigo}"
                 mensaje = f"El lote {lote.codigo} debió cosecharse el {ciclo.proxima_fecha_estimada.strftime('%d/%m/%Y')}."
@@ -91,7 +91,7 @@ def _generar_alertas_cosecha(usuario_id):
             # Mismo aviso también por SMS real (si Twilio está habilitado):
             # es el mismo usuario y la misma alerta que ya se generó, solo
             # un canal de entrega adicional — no un envío masivo nuevo.
-            notificar_por_sms(Usuario.query.get(usuario_id), titulo, mensaje)
+            notificar_por_sms(db.session.get(Usuario, usuario_id), titulo, mensaje)
 
     db.session.commit()
 

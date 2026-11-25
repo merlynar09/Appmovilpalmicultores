@@ -3,7 +3,7 @@
 
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Alert } from 'react-native';
-import { colors, spacing, typography, radius } from '../../theme/theme';
+import { colors, spacing, typography } from '../../theme/theme';
 import { Field, PrimaryButton, Card } from '../../components/ui';
 import { calcularBalance } from '../../services/balanceService';
 

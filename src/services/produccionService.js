@@ -14,7 +14,7 @@ export async function listarProduccion(loteId) {
     const data = await apiRequest(path);
     await AsyncStorage.setItem(cacheKey, JSON.stringify(data));
     return data;
-  } catch (err) {
+  } catch (_err) {
     const cached = await AsyncStorage.getItem(cacheKey);
     return cached ? JSON.parse(cached) : [];
   }

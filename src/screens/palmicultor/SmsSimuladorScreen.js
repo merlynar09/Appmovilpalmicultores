@@ -148,7 +148,7 @@ function ModoSesion() {
   return (
     <View>
       <Text style={styles.hint}>
-        Marca como lo haría un teléfono básico: pulsa "Iniciar sesión" para ver el menú principal, luego escribe un número y "Enviar" para navegar.
+        Marca como lo haría un teléfono básico: pulsa &quot;Iniciar sesión&quot; para ver el menú principal, luego escribe un número y &quot;Enviar&quot; para navegar.
       </Text>
 
       <View style={styles.sesionHeader}>

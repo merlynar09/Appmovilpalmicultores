@@ -1,0 +1,67 @@
+name: Pruebas automatizadas (backend + frontend)
+
+# DEV-F3-10: antes no existía ningún pipeline que corriera la suite en cada
+# cambio — dependía de que alguien la ejecutara a mano localmente.
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: palma_viva_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      FLASK_ENV: development
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/palma_viva_test
+      TEST_DB_HOST: localhost
+      TEST_DB_PORT: "5432"
+      TEST_DB_USER: postgres
+      TEST_DB_PASSWORD: postgres
+      SMS_USSD_SIMULATOR_ENABLED: "true"
+      TWILIO_ENABLED: "false"
+      USSD_PROVIDER_SHARED_SECRET: ci-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Instalar dependencias
+        working-directory: backend
+        run: pip install -r requirements.txt
+      - name: Aplicar migraciones
+        working-directory: backend
+        run: flask db upgrade
+        env:
+          FLASK_APP: run.py
+      - name: Ejecutar pytest con cobertura
+        working-directory: backend
+        run: pytest --cov=app --cov-report=term-missing
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Instalar dependencias
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Pruebas
+        run: npm test -- --ci

@@ -287,7 +287,7 @@ def _procesar_transporte(usuario: Usuario, args):
     if not lote:
         raise ValueError(f"no se encontró el lote '{codigo_lote}' en tus fincas")
 
-    finca = Finca.query.get(lote.finca_id)
+    finca = db.session.get(Finca, lote.finca_id)
     solicitud = SolicitudTransporte(
         palmicultor_id=usuario.id,
         finca_id=finca.id,

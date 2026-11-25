@@ -24,9 +24,11 @@ def listar_produccion():
 @role_required("palmicultor")
 def crear_registro():
     data = request.get_json(force=True) or {}
-    registro, error = _build_registro(data, current_user_id())
+    usuario_id = current_user_id()
+    registro, error = _build_registro(data, usuario_id)
     if error:
         return jsonify({"message": error}), 400
+    registro.creado_por_id = usuario_id
     db.session.add(registro)
     db.session.commit()
     return jsonify(_serialize(registro)), 201
@@ -41,16 +43,35 @@ def sync_produccion():
     el cliente), si se guardó correctamente o el motivo del error, para que
     el cliente pueda limpiar su cola local únicamente de los que sí se
     sincronizaron.
+
+    F5-01: antes un reintento del mismo envío (ej. el cliente no recibió la
+    respuesta a tiempo y reintenta) insertaba el censo por segunda vez, sin
+    ninguna forma de detectar que ya se había guardado. Ahora, si el item
+    trae `_local_id`, se busca primero un registro ya sincronizado con ese
+    mismo id para este usuario — si existe, se devuelve tal cual (idempotente)
+    en vez de duplicarlo.
     """
     data = request.get_json(force=True) or {}
     items = data.get("items") or []
+    usuario_id = current_user_id()
     resultados = []
     for item in items:
         local_id = item.get("_local_id")
-        registro, error = _build_registro(item, current_user_id())
+        if local_id:
+            existente = RegistroProduccion.query.filter_by(
+                creado_por_id=usuario_id, client_local_id=str(local_id)
+            ).first()
+            if existente:
+                resultados.append({"_local_id": local_id, "ok": True, "id": existente.id})
+                continue
+
+        registro, error = _build_registro(item, usuario_id)
         if error:
             resultados.append({"_local_id": local_id, "ok": False, "message": error})
             continue
+        registro.creado_por_id = usuario_id
+        if local_id:
+            registro.client_local_id = str(local_id)
         db.session.add(registro)
         db.session.flush()
         resultados.append({"_local_id": local_id, "ok": True, "id": registro.id})
@@ -64,9 +85,13 @@ def _build_registro(data, usuario_id):
     current_user_id() porque también lo invoca el motor USSD, que no tiene
     contexto JWT."""
     lote_id = data.get("lote_id")
-    lote = Lote.query.get(lote_id) if lote_id else None
-    if not lote or not Finca.query.filter_by(id=lote.finca_id, usuario_id=usuario_id).first():
+    lote = db.session.get(Lote, lote_id) if lote_id else None
+    finca = Finca.query.filter_by(id=lote.finca_id, usuario_id=usuario_id).first() if lote else None
+    if not lote or not finca:
         return None, "El lote indicado no existe o no te pertenece."
+    # F5-03: un lote o finca inactivos no deben admitir censos nuevos.
+    if finca.estado != "activa" or lote.estado != "activo":
+        return None, "El lote o la finca están inactivos; no se pueden registrar nuevos censos."
 
     palmas_evaluadas = data.get("palmas_evaluadas")
     palmas_improductivas = data.get("palmas_improductivas") or 0

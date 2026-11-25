@@ -57,6 +57,15 @@ export async function actualizarPerfil(payload) {
 }
 
 export async function logoutUser() {
+  // DEV-F4-03: revoca la sesión en el backend (invalida el token actual)
+  // además de borrarlo localmente. Si no hay conexión, el logout local
+  // continúa igual — no tiene sentido bloquear a alguien que quiere salir.
+  try {
+    await apiRequest('/auth/logout', { method: 'POST' });
+  } catch (_err) {
+    // sin conexión u otro error: el token sigue siendo válido en el backend
+    // hasta que expire, pero el dispositivo ya no lo usará.
+  }
   await SecureStore.deleteItemAsync('auth_token');
   await AsyncStorage.removeItem('@auth_user');
 }

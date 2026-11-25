@@ -54,5 +54,11 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 
+# =========================
+# Pruebas backend
+# =========================
+backend/.coverage
+backend/htmlcov/
+
 # Android
 android/app/debug.keystore

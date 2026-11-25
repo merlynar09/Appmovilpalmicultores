@@ -1,9 +1,9 @@
 // screens/transportador/MisSolicitudesScreen.js
 import React, { useCallback, useState } from 'react';
-import { View, Text, StyleSheet, FlatList, RefreshControl, Alert } from 'react-native';
+import { View, Text, StyleSheet, FlatList, RefreshControl } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing, typography } from '../../theme/theme';
-import { Card, PrimaryButton, EmptyState, Badge, FormPicker } from '../../components/ui';
+import { Card, PrimaryButton, EmptyState, Badge } from '../../components/ui';
 import { listarSolicitudes, actualizarEstadoSolicitud } from '../../services/logisticsService';
 
 const SIGUIENTE_ESTADO = {

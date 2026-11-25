@@ -4,7 +4,6 @@ import { View, Text, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, S
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { colors, spacing, typography, radius } from '../../theme/theme';
-import { Badge } from '../../components/ui';
 import { getStoredUser } from '../../services/authService';
 import { perfilTransportador, actualizarPerfilTransportador, listarSolicitudes } from '../../services/logisticsService';
 
